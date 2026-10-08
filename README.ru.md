@@ -35,6 +35,10 @@
 просишь что-то спокойное, для тебя это довод за неё.
 
 <p align="center">
+  <a href="assets/brand/promo/promo.mp4"><img src="assets/brand/promo/promo.gif" alt="Game Finder за 19 секунд: запрос своими словами, отзывы по смыслу, три игры карточками (ролик на английском)" width="60%"></a>
+</p>
+
+<p align="center">
   <img src="assets/brand/cards/banner.jpg" alt="Баннер подборки: «как Hollow Knight, но проще, на пару вечеров»" width="100%">
 </p>
 <p align="center">

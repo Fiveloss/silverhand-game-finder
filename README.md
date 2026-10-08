@@ -35,6 +35,10 @@ The key idea: a complaint is not always a minus. If players say a game is "too s
 and you asked for something calm, that counts for it.
 
 <p align="center">
+  <a href="assets/brand/promo/promo.mp4"><img src="assets/brand/promo/promo.gif" alt="Game Finder in 19 seconds: a request in your own words, reviews read for meaning, three picks as cards" width="60%"></a>
+</p>
+
+<p align="center">
   <img src="assets/brand/cards/banner.jpg" alt="Selection banner: like Hollow Knight, but easier, for a couple of evenings" width="100%">
 </p>
 <p align="center">
