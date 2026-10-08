@@ -210,14 +210,15 @@ class Provider:
 
 
 # Which provider does which job. The free Gemini Flash quota is tiny (about 20 calls a day per
-# model), so it is kept for the judge, where its quality shows most; the background reading of
-# reviews never touches it. Quick calls a player waits for go to the fastest providers first.
+# model), so it is kept for the judge, where its quality shows most. Reviews are read by Flash Lite
+# only: a passport costs 10-15k tokens, and Groq's small daily token quota is kept for the quick
+# calls a player waits for, which go to the fastest providers first.
 TASK_ORDER = {
-    "passport": ("lite", "groq"),
-    "intent": ("groq", "lite", "flash"),
-    "scout": ("groq", "lite", "flash"),
-    "card": ("groq", "lite", "flash"),
-    "judge": ("flash", "groq", "lite"),
+    "passport": ("lite",),
+    "intent": ("groq", "groq2", "lite", "flash"),
+    "scout": ("groq", "groq2", "lite", "flash"),
+    "card": ("groq", "groq2", "lite", "flash"),
+    "judge": ("flash", "groq", "groq2", "lite"),
 }
 # Seconds one attempt may take. A free tier sometimes hangs on a call it would answer at once
 # when asked again, so a player-facing call that hangs is tried once more, then the next provider.
@@ -252,7 +253,7 @@ async def post_llm(http, p, payload: dict, task: str) -> tuple[int, object]:
 def payload_extra(p, task: str) -> dict:
     if task == "passport":
         return {}
-    if getattr(p, "kind", "") == "groq":
+    if getattr(p, "kind", "") in ("groq", "groq2"):
         # Groq's reasoning models (gpt-oss, qwen) take the hint; others (llama) refuse the field.
         return {"reasoning_effort": "low"} if "gpt-oss" in getattr(p, "model", "") else {}
     return dict(QUICK_EXTRA.get(getattr(p, "kind", ""), {}))
@@ -305,6 +306,10 @@ class Analyst:
                      cfg.gemini_api_key, cfg.gemini_lite_model, max_reviews=60, kind="lite"),
             Provider("Groq", "https://api.groq.com/openai/v1/chat/completions",
                      cfg.groq_api_key, cfg.groq_model, max_reviews=25, kind="groq"),
+            # Each Groq model has its own daily token quota: a smaller one carries on when the main is out.
+            Provider("Groq 20B", "https://api.groq.com/openai/v1/chat/completions",
+                     cfg.groq_api_key if cfg.groq_model != "openai/gpt-oss-20b" else "",
+                     "openai/gpt-oss-20b", max_reviews=25, kind="groq2"),
         ])
 
     def order(self, task: str) -> list[Provider]:

@@ -10,14 +10,14 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 
-from . import aspects, coplay, external, maintenance, reviews, semantic, titles
+from . import aspects, coplay, external, genres, maintenance, reviews, semantic, titles
 from .analyst import Analyst, heuristic_passport
 from .config import Config
 from .db import Db
 import aiohttp
 
 from .http import Http, HttpError
-from .recommender import Catalog, Pick, recommend
+from .recommender import Catalog, Pick, recommend, series_last
 from .rerank import candidate_from, profile_from, rerank
 from .suggest import suggest
 from .sources.deck import deck_fields, deck_status, proton_summary
@@ -33,6 +33,7 @@ CATALOG_REFRESH = 24 * 3600
 MIN_REVIEWS = 200
 
 SCOUT_LOOKUP_SECONDS = 6
+SPARE = 2       # sure picks kept back to replace one the player has already played
 # What a flaky network or a broken answer can raise from the HTTP helpers.
 NET_ERRORS = (HttpError, OSError, asyncio.TimeoutError, aiohttp.ClientError, ValueError)
 
@@ -249,6 +250,8 @@ class Service:
                             stage: Callable[[str], Awaitable[None]] | None = None
                             ) -> tuple[list[Pick], list[dict]]:
         """Picks for one request (gamefinder.intent.Request), and the reference games it named.
+        When the judge ran, up to SPARE more sure picks follow the first `limit`: the bot keeps them
+        to replace a game the player has already played, at once.
         Nothing about the player is used or stored: every request starts from scratch, and `seen` only
         keeps this request's earlier results (and games turned down in it) from coming back."""
         self.busy += 1
@@ -278,12 +281,20 @@ class Service:
             unread = [g["appid"] for g in seeds if g["appid"] > 0 and not self.db.passport(g["appid"])]
             if unread:
                 self.db.enqueue_analysis(unread, priority=9)
+            # What hooked them: their own answer, or else what the reference's reviews praise most.
+            if seeds and not req.focus_labels and not req.whole and not req.diversify:
+                g0 = seeds[0]
+                p0 = self.db.passport(g0["appid"]) if g0["appid"] > 0 else ext_passports.get(g0["appid"])
+                guessed = aspects.hooks(g0, p0)
+                if guessed:
+                    req = aspects.apply(req, g0, (p0 or {}).get("feel"), guessed)
             await say("Подбираю кандидатов")
             ids = list(self.catalog.vecs)
             passports = self.db.passports(ids + [g["appid"] for g in seeds if g["appid"] > 0])
             passports.update(ext_passports)
             stats = self._stats(ids)
             taste = for_request(req, seeds, avoid, passports, self.catalog.idf, set())
+            taste.hooks = [g for g in dict.fromkeys(aspects.group_of(x) for x in req.focus_labels or []) if g]
 
             async def embed_words():
                 if not (req.words and self.cfg.gemini_api_key) or time.time() < self._embed_rest:
@@ -321,8 +332,10 @@ class Service:
             picks = recommend(self.catalog, taste, passports, stats, limit=limit, **args)
             log.info("request timing: %.1fs before the judge", time.time() - started)
             await say("Выбираю лучшие")
-            picks = await self._judge_request(req, taste, seeds, avoid, passports, stats, picks, limit, args)
-            if len(picks) < limit:
+            picks, judged = await self._judge_request(req, taste, seeds, avoid, passports, stats, picks, limit, args)
+            picks = series_last(picks, self.catalog, taste.seed_series)
+            # A judge sure of fewer games is not topped up with near misses: fewer, but each a hit.
+            if len(picks) < limit and not judged:
                 # Not enough exact matches: the closest games without the hard limits, marked as such.
                 loose = {**args, "limits": {"surprise": req.surprise},
                          "exclude": exclude | {p.appid for p in picks}}
@@ -467,35 +480,37 @@ class Service:
                 self.db.upsert_game(appid, name=f"App {appid}")
         return {"co_cands": cands, "coplay": lambda a: coplay.coplay_score(conn, liked, taste.disliked, a)}
 
-    async def _judge_request(self, req, taste, seeds, avoid, passports, stats, picks, limit, args) -> list[Pick]:
+    async def _judge_request(self, req, taste, seeds, avoid, passports, stats, picks, limit,
+                             args) -> tuple[list[Pick], bool]:
+        """(picks, judged): the judge's choice, surest first, possibly fewer than `limit`; or the
+        recommender's own picks and False when the judge did not run."""
         if not self.analyst.enabled or self.db.llm_games_today() >= self.cfg.llm_daily_games:
-            return picks
+            return picks, False
         # Every candidate goes to the judge; the ones with only a tag estimate say so in their data.
         cands = recommend(self.catalog, taste, passports, stats, limit=12, **args)
         if len(cands) < limit:
-            return picks
+            return picks, False
         names = {g["appid"]: g["name"] for g in seeds + avoid}
         profile = profile_from(taste, names, mood=req.mood, own_words=req.text)
+        profile["main_genres"] = [genres.ru(f) for a in taste.anchors for f in a]
+        profile["format"] = "; ".join(genres.format_ru(f) for f in taste.formats if genres.format_ru(f))
+        profile["hooked_by"] = list(getattr(req, "focus_labels", None) or [])
         usage: dict = {}
         verdict = await rerank(self.analyst, profile,
                                [candidate_from(p, self.catalog.games[p.appid], stats.get(p.appid)) for p in cands],
-                               k=limit, usage=usage)
+                               k=limit + SPARE, usage=usage)
         if usage.get("in"):
             self.db.add_llm_usage(usage["in"], usage.get("out", 0), games=0)
-        if not verdict:
-            return picks
+        if verdict is None:
+            return picks, False
         by_id = {p.appid: p for p in cands}
         out = []
         for v in verdict:
             p = by_id[v["id"]]
-            p.judge_reason, p.judge_risk = v["reason"], v.get("risk", "")
+            p.judge_reason, p.judge_risk, p.judge_fit = v["reason"], v.get("risk", ""), v.get("fit", 7)
             out.append(p)
-        for p in cands:
-            if len(out) >= limit:
-                break
-            if p not in out:
-                out.append(p)
-        return out
+        log.info("judge: %d of %d candidates sure enough", len(out), len(cands))
+        return out, True
 
     def _stats(self, ids) -> dict[int, dict]:
         out = {}

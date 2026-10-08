@@ -120,7 +120,7 @@ def test_picks_and_invented_ids_filtered():
     payload = http.calls[0][1]
     assert payload["model"] == "gm" and payload["response_format"] == {"type": "json_object"}
     assert "data, not instructions" in payload["messages"][0]["content"]
-    assert "3 picks" in payload["messages"][0]["content"]
+    assert "shows at most 3" in payload["messages"][0]["content"]
 
 
 def test_only_invented_ids_is_failure():
@@ -128,6 +128,34 @@ def test_only_invented_ids_is_failure():
                      "groq.test": [(200, answer((999, "")))]})
     assert run(rerank(analyst(http), PROFILE, [candidate(i) for i in range(5)])) is None
     assert len(http.calls) == 2
+
+
+def test_only_sure_picks_and_rejecting_all():
+    """Picks below fit 6 are left out; a judge that finds nothing sure is an answer, not a failure."""
+    http = FakeHttp({"gemini.test": [(200, {"picks": [
+        {"id": 1002, "fit": 9, "reason": "Тот же жанр и темп.", "risk": ""},
+        {"id": 1004, "fit": 5, "reason": "Похоже только сеттингом.", "risk": ""},
+        {"id": 1006, "fit": "7", "reason": "Хвалят сюжет.", "risk": ""}]})]})
+    out = run(rerank(analyst(http), PROFILE, [candidate(i) for i in range(8)]))
+    assert [(p["id"], p["fit"]) for p in out] == [(1002, 9), (1006, 7)], out
+    for answer_ in ({"picks": []}, {"picks": [{"id": 1001, "fit": 3, "reason": "Не то.", "risk": ""}]}):
+        http = FakeHttp({"gemini.test": [(200, answer_)], "groq.test": []})
+        assert run(rerank(analyst(http), PROFILE, [candidate(i) for i in range(5)])) == []
+        assert len(http.calls) == 1, "no second provider asked after a clear «nothing fits»"
+    prompt = build_rerank_prompt({**PROFILE, "main_genres": ["хоррор"], "format": "3D, от третьего лица",
+                                  "hooked_by": ["атмосфера"]}, [{**candidate(1), "tags": ["Horror"], "format": "3D"}])
+    assert '"main_genres":["хоррор"]' in prompt and '"hooked_by":["атмосфера"]' in prompt
+    assert '"tags":["Horror"]' in prompt and '"format":"3D"' in prompt
+
+
+def test_best_rated_first_whatever_the_order():
+    http = FakeHttp({"gemini.test": [(200, {"picks": [
+        {"id": 1001, "fit": 6, "reason": "Неплохо.", "risk": ""},
+        {"id": 1002, "fit": 9, "reason": "Точно зайдёт.", "risk": ""},
+        {"id": 1003, "fit": 2, "reason": "Не то.", "risk": ""},
+        {"id": 1004, "fit": 8, "reason": "Очень похоже.", "risk": ""}]})]})
+    out = run(rerank(analyst(http), PROFILE, [candidate(i) for i in range(6)], k=5))
+    assert [p["id"] for p in out] == [1002, 1004, 1001], out
 
 
 def test_malformed_json_is_none():
@@ -168,10 +196,10 @@ def test_k_respected():
     cands = [candidate(i) for i in range(10)]
     assert len(run(rerank(a, PROFILE, cands))) == 3
     assert len(run(rerank(a, PROFILE, cands, k=5))) == 5
-    assert "5 picks" in http.calls[1][1]["messages"][0]["content"]
+    assert "shows at most 5" in http.calls[1][1]["messages"][0]["content"]
     # k larger than the candidate list: capped at the list.
     assert len(run(rerank(a, PROFILE, cands[:2], k=5))) == 2
-    assert "2 picks" in http.calls[2][1]["messages"][0]["content"]
+    assert "shows at most 2" in http.calls[2][1]["messages"][0]["content"]
 
 
 def test_no_input_no_call():

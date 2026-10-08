@@ -120,9 +120,9 @@ def test_provider_routing_and_daily_limits():
                           groq_api_key="g", groq_model="llama")
     a = Analyst.from_config(None, cfg)
     kinds = lambda task: [p.kind for p in providers_for(a, task)]  # noqa: E731
-    assert kinds("passport") == ["lite", "groq"]
-    assert kinds("judge") == ["flash", "groq", "lite"]
-    assert kinds("intent") == ["groq", "lite", "flash"]
+    assert kinds("passport") == ["lite"]
+    assert kinds("judge") == ["flash", "groq", "groq2", "lite"]
+    assert kinds("intent") == ["groq", "groq2", "lite", "flash"]
     flash = a.order("judge")[0]
     daily = [{"error": {"code": 429, "details": [
         {"@type": "type.googleapis.com/google.rpc.QuotaFailure",
@@ -131,7 +131,7 @@ def test_provider_routing_and_daily_limits():
     assert limit_rest(flash, daily) == 58009
     assert limit_rest(flash, {"error": {"code": 429}}) == 90
     flash.resting_until = time.time() + limit_rest(flash, daily)
-    assert kinds("judge") == ["groq", "lite"]
+    assert kinds("judge") == ["groq", "groq2", "lite"]
     assert payload_extra(flash, "judge") == {"reasoning_effort": "low"}
     assert payload_extra(flash, "passport") == {} and payload_extra(a.order("judge")[1], "judge") == {}
     no_groq = Analyst.from_config(None, SimpleNamespace(**{**vars(cfg), "groq_api_key": ""}))
@@ -148,6 +148,29 @@ def test_one_game_per_series():
     c.vecs = {1: {"RPG": 1.0}, 2: {"RPG": 1.0}, 3: {"Cyberpunk": 1.0}, 4: {"Fantasy": 1.0}}
     picks = [Pick(a, s, {}, {}, False) for a, s in ((1, 1.1), (2, 1.0), (3, 0.9), (4, 0.8))]
     assert [p.appid for p in diversify(picks, c, 3)] == [1, 3, 4]
+
+
+def test_reference_series_and_editions():
+    from gamefinder.recommender import Pick, series_last
+    from gamefinder.titles import same_game
+    assert same_game("Resident Evil 4", "Resident Evil 4 (2005)") and same_game("Dead Space", "Dead Space (2023)")
+    assert not same_game("Subnautica", "Subnautica: Below Zero") and not same_game("Hades", "Hades II")
+    c = Catalog()
+    c.games = {1: {"name": "Resident Evil Village"}, 2: {"name": "The Evil Within 2"}, 3: {"name": "Dead Space"}}
+    picks = [Pick(a, 1.0, {}, {}, False) for a in (1, 2, 3)]
+    assert [p.appid for p in series_last(picks, c, {"resident evil"})] == [2, 3, 1]
+
+
+def test_format_rules():
+    from gamefinder import genres
+    elden = genres.format_of({"Souls-like": 1000, "Open World": 900, "Third Person": 600, "3D": 500, "Action": 800})
+    hk = genres.format_of({"Metroidvania": 1000, "Souls-like": 900, "2D": 800, "Action": 700})
+    clair = genres.format_of({"Turn-Based Combat": 1000, "RPG": 900, "3D": 600, "JRPG": 700})
+    fps = genres.format_of({"Souls-like": 1000, "First-Person": 700, "3D": 500, "Action": 800})
+    assert elden == {"dim": "3d", "combat": "real", "view": "third"}, elden
+    assert genres.format_clash(elden, hk)[0] and genres.format_clash(elden, clair)[0]
+    assert genres.format_clash(elden, fps) == (False, True)
+    assert genres.format_ru(elden) == "3D, от третьего лица, бои в реальном времени"
 
 
 def test_complaint_reads_against_taste():
@@ -200,12 +223,14 @@ def test_taste_and_recommend():
     assert 5 not in ids                                        # like the disliked shooter
     assert {3, 7} <= set(ids) <= {2, 3, 7}                      # Subnautica shares too little (0.15)
     assert picks[0].because == 1
-    # Real players who love Outer Wilds also sink hours into Subnautica: it gets in despite weak tags.
-    co = recommend(cat, taste, {}, {}, limit=3, co_cands={2: 0.8},
-                   coplay=lambda a: 0.8 if a == 2 else 0.0, experience=lambda ids: {a: 0.9 for a in ids})
-    assert 2 in [p.appid for p in co]
-    sub = next(p for p in co if p.appid == 2)
-    assert sub.parts["coplay"] == 1.0 and sub.parts["experience"] == 0.9
+    # Players who love Outer Wilds also sink hours into Subnautica, but it shares none of Outer Wilds'
+    # main genres (puzzle, detective): co-play alone never makes a match. It still counts for games that do.
+    assert taste.anchors and taste.anchors[0][0] in ("Puzzle", "detective"), taste.anchors
+    co = recommend(cat, taste, {}, {}, limit=3, co_cands={2: 0.8, 7: 0.8},
+                   coplay=lambda a: 0.8 if a in (2, 7) else 0.0, experience=lambda ids: {a: 0.9 for a in ids})
+    assert 2 not in [p.appid for p in co]
+    witness = next(p for p in co if p.appid == 7)
+    assert witness.parts["coplay"] == 1.0 and witness.parts["experience"] == 0.9 and witness.genres
 
 
 def test_request_focus():

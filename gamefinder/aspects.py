@@ -375,6 +375,45 @@ def options(game: dict, passport: dict | None, card_aspects: list[dict] | None =
     return out
 
 
+# Loved, but no reason to play ANOTHER game: the same music or setting alone makes no good match.
+NOT_A_HOOK = {"music", "visual", "setting"}
+
+
+def hooks(game: dict, passport: dict | None, n: int = 4) -> list[Aspect]:
+    """What players love this game for, most praised first (its reviews' praise, then its strongest
+    feel axes and tags), without music, looks and setting. The bot uses them when the player did not
+    say what hooked them: a Cyberpunk 2077 fan is matched on story, builds and exploration, not on neon."""
+    return [a for a in options(game, passport, limit=8) if a.group and a.group not in NOT_A_HOOK][:n]
+
+
+def strengths(game: dict, passport: dict | None) -> dict[str, float]:
+    """group -> 0..1, how surely this game is strong at it: praised in its reviews (most sure), a strong
+    feel axis in its passport, or only its player tags (least sure)."""
+    out: dict[str, float] = {}
+
+    def put(group: str, v: float) -> None:
+        if group:
+            out[group] = max(out.get(group, 0.0), min(1.0, v))
+
+    p = passport or {}
+    real = p.get("_source") == "llm"
+    for pr in p.get("praise") or [] if real else []:
+        put(group_of(str((pr or {}).get("point") or "")), {"most": 1.0, "many": 0.85}.get(pr.get("share"), 0.7))
+    trust = 0.75 if real else 0.4
+    feel = p.get("feel") or {}
+    for axis, high, thr, group in FEEL_RULES:
+        v = feel.get(axis)
+        if v is not None and (v >= thr if high else v <= thr):
+            put(group, trust)
+    tags = _game_tags(game)
+    top = max(tags.values(), default=0) or 1
+    for tag, votes in tags.items():
+        if tag in TAG_MAP:
+            group, w, _ = TAG_MAP[tag]
+            put(group, 0.55 * w * min(1.0, votes / top + 0.2))
+    return out
+
+
 def _same(a: Aspect, b: Aspect) -> bool:
     return _norm(a.label) == _norm(b.label) or (a.group and a.group == b.group)
 

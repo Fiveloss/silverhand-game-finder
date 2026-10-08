@@ -220,7 +220,8 @@ def aspect_kb(opts, picked) -> InlineKeyboardMarkup:
     rows = aspects.keyboard(opts, picked)
     rows = [[(t, d) for t, d in row if d not in ("asp:all", "asp:done")] for row in rows]
     rows.append([("Дальше ▸" if picked else "Всё сразу ▸", "asp:done" if picked else "asp:all")])
-    rows.append([("⚡ Подобрать сейчас", "go"), ("◂ В начало", "home")])
+    rows.append([("🤔 Не та игра", "wrong"), ("⚡ Подобрать сейчас", "go")])
+    rows.append([("◂ В начало", "home")])
     return _kb(rows)
 
 
@@ -628,14 +629,20 @@ def build_router(app: App) -> Router:
                     "что можно: <i>«хоррор можно»</i>, <i>«можно подлиннее»</i>.")), loosen_kb())
             else:
                 try:
+                    picks, spare = picks[:3], picks[3:]
                     await send_cards(uid, req, picks, seeds, banner=not seen)
                     shown = [p.appid for p in picks]
+                    app.update_session(uid, spare=[_pick_json(p) for p in spare])
                     db.update_user(uid, state="fix")
                     app.update_session(uid, step="results", seen=seen + shown, shown=shown)
+                    few = ""
+                    if len(picks) < 3 and all(p.judge_fit for p in picks):
+                        few = (f"Уверенно подошли только {len(picks)} — остальных кандидатов нейросеть "
+                               "отбраковала, чтобы не подсовывать «почти то». «Ещё 3» покажет следующих.\n\n")
                     await app.panel(uid, "pick", texts.card(
                         "Подкрутить?", lead=wizard_lead(req),
-                        note="Нажми кнопку или просто напиши поправку: <i>«без хоррора»</i>, <i>«покороче»</i>, "
-                             "<i>«а что-нибудь с кооперативом?»</i>"), results_kb(), fresh=True)
+                        note=few + "Нажми кнопку или просто напиши поправку: <i>«без хоррора»</i>, "
+                                   "<i>«покороче»</i>, <i>«а что-нибудь с кооперативом?»</i>"), results_kb(), fresh=True)
                 except Exception:
                     log.exception("sending the picks failed")
                     await failed(fresh=True)            # under the cards that did go out
@@ -761,12 +768,26 @@ def build_router(app: App) -> Router:
             seen = sess.get("seen", [])
             if int(appid) not in seen:
                 app.update_session(uid, seen=seen + [int(appid)])
-        await c.answer("Понял, в этом поиске больше не покажу" if sess.get("req") else "Понял")
+        spare = list(sess.get("spare") or []) if sess.get("req") and int(appid) in (sess.get("shown") or []) else []
+        nxt = _pick_from(spare.pop(0)) if spare else None
+        if nxt:
+            await c.answer("Понял, вот замена")
+        else:
+            await c.answer("Понял, в этом поиске больше не покажу" if sess.get("req") else "Понял")
         msg = c.message if isinstance(c.message, Message) else None    # older than 48 h: inaccessible
         rows = msg.reply_markup.inline_keyboard if msg and msg.reply_markup else []
         first = rows[0][0].callback_data if rows and rows[0] else None
         if first and first.startswith("pp:"):
             await _set_markup(msg, pick_kb(int(appid), verdict))
+        if nxt:
+            # The judge's next sure pick, kept back for exactly this: no new search, no wait.
+            sess = app.session(uid)
+            app.update_session(uid, spare=spare, shown=list(sess.get("shown") or []) + [nxt.appid],
+                               seen=list(sess.get("seen") or []) + [nxt.appid])
+            try:
+                await send_cards(uid, app.request(uid) or Request(), [nxt], [], banner=False)
+            except Exception:
+                log.exception("replacement card failed")
 
     # --- a game's breakdown
     @r.callback_query(F.data.startswith("pp:"))
@@ -980,6 +1001,19 @@ def build_router(app: App) -> Router:
             else:
                 await run(uid, req)
 
+    @r.callback_query(F.data == "wrong")
+    async def on_wrong_game(c: CallbackQuery):
+        """The reference was found as another game («резик» as Rez): ask for the exact title."""
+        await c.answer()
+        uid = c.from_user.id
+        found = ((app.session(uid).get("ask") or {}).get("seed") or {}).get("name", "")
+        db.update_user(uid, state="like")
+        app.update_session(uid, step="home")
+        await app.panel(uid, "pick", texts.card("Какую игру ты имел в виду?", lead=(
+            f"Я нашёл «{escape(found)}» — видимо, не то." if found else ""), note=(
+            "Напиши название точнее, лучше как в Steam: <i>«Resident Evil 4»</i>, <i>«Alan Wake 2»</i>. "
+            "Можно с годом или номером части.")), back_kb())
+
     @r.callback_query(F.data == "noop")
     async def noop(c: CallbackQuery):
         await c.answer()
@@ -992,11 +1026,28 @@ def build_router(app: App) -> Router:
     return r
 
 
+def _pick_json(p) -> dict:
+    """A Pick as plain data for the session (a spare pick waits there for «Уже играл»)."""
+    from dataclasses import asdict
+    return asdict(p)
+
+
+def _pick_from(d: dict):
+    from .recommender import Pick
+    try:
+        d = dict(d)
+        d["taste_notes"] = [tuple(x) for x in d.get("taste_notes") or []]
+        return Pick(**d)
+    except (TypeError, ValueError):
+        return None
+
+
 def _apply_aspects(req: Request, ask: dict, chosen, all_of_it: bool = False) -> Request:
     out = aspects.apply(req, ask["seed"], ask.get("feel"), chosen, all_of_it=all_of_it)
     from dataclasses import asdict, is_dataclass
     out = Request.from_json(json.dumps(asdict(out) if is_dataclass(out) else dict(vars(out))))
     out.asked = True
+    out.whole = bool(all_of_it)
     return out
 
 

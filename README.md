@@ -236,6 +236,17 @@ flowchart LR
 - **The scout.** Tag similarity finds games of the same genre, not the same experience,
   so one LLM call proposes up to 15 games for what the player loved, each with a reason.
   Every title is matched strictly on Steam and then scored like any other candidate.
+- **Genre and format first.** A reference game is anchored by its most pronounced genres
+  (the genre tags with the most player votes; close ones count as one family: survival
+  horror and psychological horror are both horror). A candidate must share its main genre
+  or two of its defining ones, and its format: 2D vs 3D and turn-based vs real-time combat
+  are hard rules, another camera only costs score. Nothing gets around this, neither the
+  co-play graph nor the scout: a game everyone plays is no match for Resident Evil unless
+  it is a horror game too. The reference itself in another edition never comes up; one
+  game of its series at most, and always last.
+- **What it is loved for.** Without the player's own answer to «Чем зацепила?», the bot takes
+  what the reference's reviews praise most (story, builds, exploration…; never music, looks or
+  setting) and scores each candidate on being strong at the same things.
 - **Picking.** Tag similarity is the cosine between SteamSpy tag vectors weighted by
   IDF (capped, so one rare shared tag doesn't make two games twins); a candidate must
   share enough with the references, or be backed by the co-play graph or the scout.
@@ -247,7 +258,7 @@ flowchart LR
   it; quality complaints always count against. Hours, co-op, difficulty, tension,
   length, grind and social are hard limits; story, exploration and the other axes are
   wishes that move the score. The best are spread out (a penalty for tag similarity to
-  the games already chosen), and when exact matches run short, the closest games
+  the games already chosen, one game per series), and when exact matches run short, the closest games
   without the hard limits fill in, marked as a compromise.
 - **The judge.** With a key and quota left, the model reads the top dozen candidates
   next to the request (tag-only ones say so) and picks three, with a concrete reason and
@@ -324,7 +335,7 @@ the tests and restarts the service; the database in `data/` and `.env` stay.
 | `GEMINI_EMBED_MODEL` | `gemini-embedding-001` | the embedding model for meaning-based matching (same key); changing it wipes the vectors, which are then rebuilt over days |
 | `GROQ_API_KEY` | — | Groq key, the last fallback while Gemini rests after a rate limit or fails; free: [console.groq.com/keys](https://console.groq.com/keys) |
 | `GROQ_MODEL` | `openai/gpt-oss-120b` | the Groq model |
-| `LLM_DAILY_GAMES` | `400` | review analyses a day (UTC); the background takes at most 80%; after that, heuristics until tomorrow |
+| `LLM_DAILY_GAMES` | `500` | review analyses a day (UTC); the background takes at most 80%; after that, heuristics until tomorrow |
 | `IGDB_CLIENT_ID` · `IGDB_CLIENT_SECRET` | — | a Twitch app for IGDB: games outside Steam as references; free |
 | `STEAM_API_KEY` | — | Steam Web API key: the co-play graph from the public libraries of reviewers |
 | `REDDIT_CLIENT_ID` · `REDDIT_CLIENT_SECRET` | — | a Reddit "script" app: discussions as one more source |
@@ -368,6 +379,7 @@ The tests are plain Python files with no framework: each `tests*.py` runs on its
 | `gamefinder/aspects.py` | "what exactly hooked you?": options per game, answers in words, how they steer the request |
 | `gamefinder/service.py` | `recommend_now`, references, `aspect_options`, regional prices, analysis, the background worker |
 | `gamefinder/recommender.py` · `taste.py` | scoring, hard limits, diversity; the taste of one request |
+| `gamefinder/genres.py` | a game's defining genres and format from its player tags, and the rules for a match |
 | `gamefinder/suggest.py` · `rerank.py` | the scout: LLM-proposed candidates; the judge: the final three, with reasons |
 | `gamefinder/analyst.py` · `reviews.py` | the game passport: schema, Gemini and Groq with rate-limit rests, heuristics; review statistics |
 | `gamefinder/semantic.py` · `coplay.py` | meaning-based matching and quotes; the co-play graph |
@@ -379,7 +391,7 @@ The tests are plain Python files with no framework: each `tests*.py` runs on its
 | `gamefinder/db.py` · `http.py` | SQLite; HTTP with per-host pacing |
 | `deploy/` | `install.sh` and the systemd unit |
 | `tools/make_intro.py` · `make_cards.py` | the description animation, the menu screens' animations and the banner; the README card previews |
-| `tools/eval_picks.py` | real requests through the whole pipeline on a copy of the database: picks, score parts, the judge's reasons, timing |
+| `tools/eval_picks.py` · `golden.json` | real requests through the whole pipeline on a copy of the database: picks, score parts, the judge's reasons, timing; `--golden` checks 30 requests against games that fit and games that must never come up |
 
 ## Privacy
 

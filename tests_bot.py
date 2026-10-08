@@ -331,6 +331,7 @@ class FakeService:
         self.asked: list[str] = []
         self.requests: list[tuple[int, Request, set[int]]] = []
         self.price_calls: list[tuple[tuple[int, ...], str]] = []
+        self.spare = 0                # sure picks the judge adds after the three (Service.SPARE)
 
     def refresh_catalog(self) -> None:
         self.catalog.build(self.db.catalog(200))
@@ -387,7 +388,7 @@ class FakeService:
             if found:
                 seeds.append(found[0])
         seed_ids = {g["appid"] for g in seeds}
-        ids = [] if "empty" in self.fail else [a for a in POOL if a not in seen and a not in seed_ids][:limit]
+        ids = [] if "empty" in self.fail else [a for a in POOL if a not in seen and a not in seed_ids][:limit + self.spare]
         todo = [a for a in ids if not self.passport_fresh(a)]
         for i, appid in enumerate(todo):
             if progress:
@@ -396,7 +397,8 @@ class FakeService:
         return [Pick(appid=a, score=0.8, parts={}, passport=self.db.passport(a), passport_real=True,
                      because=seeds[0]["appid"] if seeds else None, feel_matches=["pace"],
                      taste_notes=[("слишком <быстро>", True)], warnings=["баги & вылеты"],
-                     evidence=[{"text": "Залип & не жалею <3", "hours": 42.5}]) for a in ids], seeds
+                     evidence=[{"text": "Залип & не жалею <3", "hours": 42.5}],
+                     judge_fit=8 if self.spare else 0) for a in ids], seeds
 
 
 class Harness:
@@ -722,10 +724,10 @@ def test_keyboards_fit_telegram():
     assert labels_of(botmod.avoid_kb(["horror"]))[0] == "✓ Хоррор"
     assert labels_of(botmod.avoid_kb(["horror"]))[-3] == "Дальше ▸"
     assert datas_of(botmod.aspect_kb(opts, [])) == ["asp:explore", "asp:atmos", f"asp:{'x' * 12}", "asp:all",
-                                                    "go", "home"]
+                                                    "wrong", "go", "home"]
     picked = botmod.aspect_kb(opts, ["explore"])
-    assert datas_of(picked)[-3:] == ["asp:done", "go", "home"] and "✓ Исследование мира" in labels_of(picked)
-    assert labels_of(picked)[-3] == "Дальше ▸" and labels_of(botmod.aspect_kb(opts, []))[-3] == "Всё сразу ▸"
+    assert datas_of(picked)[-4:] == ["asp:done", "wrong", "go", "home"] and "✓ Исследование мира" in labels_of(picked)
+    assert labels_of(picked)[-4] == "Дальше ▸" and labels_of(botmod.aspect_kb(opts, []))[-4] == "Всё сразу ▸"
     assert labels_of(botmod.time_kb()) == ["🌙 Вечер · до 4 ч", "Пара вечеров · до 10 ч", "Неделя · до 25 ч",
                                            "♾ Надолго · 30+ ч", "Неважно", "◂ В начало"]
     assert labels_of(botmod.results_kb()) == ["Покороче", "Попроще", "Посложнее", "Сюжетнее", "Спокойнее",
@@ -757,7 +759,7 @@ def test_config_empty_values_are_defaults():
     try:
         os.environ.update(keys)
         cfg = load_config(nowhere)
-        assert cfg.llm_daily_games == 400 and cfg.animate_cards is True and cfg.store_cc == "kz"
+        assert cfg.llm_daily_games == 500 and cfg.animate_cards is True and cfg.store_cc == "kz"
         assert cfg.db_path == "data/gamefinder.db" and cfg.passport_max_age_days == 30 and cfg.owner_ids == frozenset()
         os.environ["ANIMATE_CARDS"] = "0"
         assert load_config(nowhere).animate_cards is False
@@ -939,9 +941,9 @@ async def test_wizard_with_buttons(h):
     assert h.s.asked == ["Hollow Knight"] and h.s.requests == [] and h.state(FRIEND) == "wizard"
     assert "Запрос: как Hollow Knight · проще" in h.caption(FRIEND)
     datas = h.pbuttons(FRIEND)
-    assert datas == HK_ASPECTS + ["asp:all", "go", "home"], datas
+    assert datas == HK_ASPECTS + ["asp:all", "wrong", "go", "home"], datas
     labels = h.pbuttons(FRIEND, labels=True)
-    assert labels[-3] == "Всё сразу ▸"
+    assert labels[-4] == "Всё сразу ▸"
     # the example answer is made of this game's own options: the first and the last
     example = f"«{labels[0].lower()}, а {labels[len(HK_ASPECTS) - 1].lower()} не главное»"
     assert f"Отметь, что зацепило, или ответь словами: <i>{example}</i>." in h.caption(FRIEND), h.caption(FRIEND)
@@ -955,7 +957,7 @@ async def test_wizard_with_buttons(h):
     await h.press(FRIEND, "asp:combat")                        # toggled off again
     labels = h.pbuttons(FRIEND, labels=True)
     assert "✓ Исследование мира" in labels and "✓ Атмосфера" in labels and "Боевая система" in labels
-    assert h.pbuttons(FRIEND)[-3:] == ["asp:done", "go", "home"] and labels[-3] == "Дальше ▸"
+    assert h.pbuttons(FRIEND)[-4:] == ["asp:done", "wrong", "go", "home"] and labels[-4] == "Дальше ▸"
     assert h.session(FRIEND)["ask"]["picked"] == ["explore", "atmos"] and h.s.requests == []
 
     await h.press(FRIEND, "asp:done")
@@ -2052,6 +2054,37 @@ async def test_home_drops_a_correction_typed_during_a_search(h):
     await h.press(FRIEND, "home")
     await h.press(FRIEND, "q:evening")
     assert len(h.s.requests) == 4
+
+
+@scenario
+async def test_played_card_is_replaced_by_a_spare(h):
+    """The judge's spare sure picks replace a game the player has already played, at once."""
+    h.s.spare = 2
+    await results_for(h, FRIEND)                                # shows 5, 4, 7; spares 2, 8
+    assert len(h.s.requests) == 1 and [d["appid"] for d in h.session(FRIEND)["spare"]] == [2, 8]
+    m = h.mark()
+    await h.press(FRIEND, "fb:played:5")
+    assert [c.photo.filename for c in h.photos(FRIEND, m)] == ["2.jpg"] and len(h.s.requests) == 1
+    assert 2 in h.session(FRIEND)["shown"] and 5 in h.session(FRIEND)["seen"]
+    await h.press(FRIEND, "fb:skip:4")
+    assert [c.photo.filename for c in h.photos(FRIEND, m)] == ["2.jpg", "8.jpg"]
+    m = h.mark()
+    await h.press(FRIEND, "fb:played:7")                        # no spares left: just hidden
+    assert h.photos(FRIEND, m) == [] and h.session(FRIEND)["spare"] == []
+    assert h.answers()[-1] == "Понял, в этом поиске больше не покажу"
+
+
+@scenario
+async def test_wrong_reference_asks_for_the_exact_title(h):
+    """«🤔 Не та игра» under «Чем зацепила»: the bot asks for the exact title and starts over with it."""
+    await h.send(FRIEND, "/start")
+    await h.send(FRIEND, "как Hollow Knight")
+    assert "Чем именно зацепила Hollow Knight?" in h.check_panel(FRIEND).caption
+    await h.press(FRIEND, "wrong")
+    cap = h.check_panel(FRIEND).caption
+    assert "Какую игру ты имел в виду?" in cap and "«Hollow Knight»" in cap and h.state(FRIEND) == "like"
+    await h.send(FRIEND, "Celeste")
+    assert "Чем именно зацепила Celeste?" in h.check_panel(FRIEND).caption and h.req(FRIEND).seeds == ["Celeste"]
 
 
 def main():

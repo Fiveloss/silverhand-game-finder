@@ -45,6 +45,26 @@ def core(title: str) -> str:
     return " ".join(out)
 
 
+_SERIES_STOP = {"the", "a", "an", "of", "at", "and", "in", "on", "to", "for"}
+
+
+def series_key(name: str) -> str:
+    """The series a title belongs to: the first two meaningful words of its main part, without
+    sequel numbers ("Resident Evil Village" and "Resident Evil 4" -> "resident evil",
+    "My Time at Portia" -> "my time", "Subnautica: Below Zero" -> "subnautica")."""
+    main = re.split(r":| - | – | — ", name or "")[0]
+    words = [w for w in core(main).split() if not w.isdigit() and w not in _SERIES_STOP]
+    return " ".join(words[:2])
+
+
+def same_game(a: str, b: str) -> bool:
+    """One game in two editions: a remaster, a remake under the same name, a year in brackets
+    ("Resident Evil 4" and "Resident Evil 4 (2005)"; not "Subnautica: Below Zero")."""
+    def bare(t: str) -> str:
+        return " ".join(w for w in core(t).split() if not (w.isdigit() and len(w) == 4))
+    return bool(bare(a)) and bare(a) == bare(b)
+
+
 # Store search mixes these in with the game itself.
 NOT_A_GAME = re.compile(r"soundtrack|\bost\b|artbook|art book|season pass|redkit|sdk|dedicated server|"
                         r"саундтрек|артбук|сезонный абонемент|\bdlc\b|bonus content|wallpaper", re.I)
@@ -59,6 +79,15 @@ ALIASES = {
     "rdr2": "red dead redemption 2", "ff": "final fantasy", "dbd": "dead by daylight", "ac": "assassin's creed",
     "skyrim": "the elder scrolls v skyrim", "ведьмак": "the witcher", "киберпанк": "cyberpunk 2077",
     "гта": "grand theft auto", "рдр": "red dead redemption", "скайрим": "the elder scrolls v skyrim",
+    # Russian player slang
+    "резик": "resident evil", "резидент": "resident evil", "резидентэвил": "resident evil",
+    "сабнатика": "subnautica", "сабнавтика": "subnautica", "элден": "elden ring", "фолыч": "fallout",
+    "фоллаут": "fallout", "фаллаут": "fallout", "соулс": "dark souls", "дарксоулс": "dark souls",
+    "хк": "hollow knight", "холлоу": "hollow knight", "балдурс": "baldur's gate", "балдур": "baldur's gate",
+    "сталкер": "stalker", "вуконг": "black myth wukong", "майнкрафт": "minecraft", "террария": "terraria",
+    "дст": "don't starve together", "сайлент": "silent hill", "сайлентхилл": "silent hill",
+    "масс": "mass effect", "дедспейс": "dead space", "биошок": "bioshock", "дисонорд": "dishonored",
+    "хадес": "hades", "аид": "hades", "стардью": "stardew valley", "стардю": "stardew valley",
 }
 
 

@@ -395,6 +395,30 @@ def test_pick():
     assert A.question("Hollow Knight") == "Чем именно зацепила Hollow Knight?"
 
 
+def test_hooks_are_what_reviews_praise_not_the_setting():
+    from gamefinder import aspects
+    """Cyberpunk 2077 is loved for its story, builds and world, not for neon: a game with only the
+    setting is weak where it counts, a game praised for the same things is strong."""
+    cp_game = {"name": "Cyberpunk 2077", "tags": {"Cyberpunk": 1000, "Open World": 900, "RPG": 800, "Story Rich": 700,
+                                                  "Atmospheric": 600, "FPS": 500, "Great Soundtrack": 400}}
+    cp = {"_source": "llm", "feel": {"story": 9, "complexity": 7, "exploration": 8},
+          "praise": [{"point": "Атмосфера и дизайн Найт-Сити", "share": "most"},
+                     {"point": "Глубокий сюжет и персонажи", "share": "most"},
+                     {"point": "Отличный саундтрек", "share": "many"},
+                     {"point": "Гибкая прокачка и билды", "share": "many"}]}
+    hooks = [a.group for a in aspects.hooks(cp_game, cp)]
+    assert set(hooks[:2]) == {"atmos", "story"} and "depth" in hooks, hooks
+    assert not set(hooks) & aspects.NOT_A_HOOK
+    neon = aspects.strengths({"tags": {"Cyberpunk": 1000, "Atmospheric": 700, "Flight": 600}}, None)
+    rpg = aspects.strengths({"tags": {"RPG": 1000, "Open World": 900}},
+                            {"_source": "llm", "feel": {"story": 9, "exploration": 8, "complexity": 8},
+                             "praise": [{"point": "Сюжет и квесты", "share": "most"},
+                                        {"point": "Прокачка персонажа", "share": "many"}]})
+    fit = lambda st: sum(st.get(h, 0) for h in hooks) / len(hooks)  # noqa: E731
+    assert fit(rpg) > fit(neon) + 0.3, (fit(rpg), fit(neon))
+    assert rpg["story"] == 1.0 and neon.get("story", 0) == 0
+
+
 def main():
     tests = [(n, f) for n, f in globals().items() if n.startswith("test_") and callable(f)]
     failed = 0

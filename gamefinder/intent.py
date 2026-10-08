@@ -66,6 +66,7 @@ class Request:
     mute_tags: list[str] = field(default_factory=list)      # seed tags tied to aspects they did not pick
     focus_labels: list[str] = field(default_factory=list)   # what they picked, for the banner
     asked: bool = False                                     # the question was already asked for this request
+    whole: bool = False                                     # «Всё сразу»: the reference as a whole, no hooks guessed
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False, separators=(",", ":"))
@@ -789,6 +790,7 @@ def coerce(d) -> Request:
     r.mute_tags = [str(t)[:40] for t in (d.get("mute_tags") or []) if isinstance(t, str)][:20]
     r.focus_labels = [_clean(t, 40) for t in (d.get("focus_labels") or []) if isinstance(t, str)][:4]
     r.asked = _bool(d.get("asked"))
+    r.whole = _bool(d.get("whole"))
     return r
 
 
@@ -800,7 +802,8 @@ The player writes, usually in Russian, what they want to play RIGHT NOW. Read it
 Fields:
 - seeds: titles of games the player wants something LIKE ("как X", "типа X", "похоже на X", "вроде X", \
 "как X и Y", "like X"). Only titles that are in the message; write the official title when you are sure \
-("римворлд" -> "RimWorld"), otherwise as written. [] if none.
+("римворлд" -> "RimWorld"); expand player slang and abbreviations to the official title \
+("резик" -> "Resident Evil", "фолыч" -> "Fallout", "бг3" -> "Baldur's Gate 3"), otherwise as written. [] if none.
 - avoid: titles the player wants to stay away from ("не как Dark Souls", "только не Fortnite"). [] if none.
 - mood: exactly one of: {moods}. "any" when nothing fits. coop when they play with someone.
 - axes: ONLY the axes the message implies, integers 0-10, others omitted. Axes (0 = first, 10 = second): \

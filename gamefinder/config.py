@@ -40,7 +40,7 @@ class Config:
     gemini_embed_model: str = "gemini-embedding-001"
     groq_api_key: str = ""
     groq_model: str = "openai/gpt-oss-120b"
-    llm_daily_games: int = 400
+    llm_daily_games: int = 500
     # Optional sources.
     steam_api_key: str = ""
     igdb_client_id: str = ""
@@ -86,7 +86,7 @@ def _build(token: str, e) -> Config:
         gemini_embed_model=e("GEMINI_EMBED_MODEL", "gemini-embedding-001").strip(),
         groq_api_key=e("GROQ_API_KEY", "").strip(),
         groq_model=e("GROQ_MODEL", "openai/gpt-oss-120b").strip(),
-        llm_daily_games=int(e("LLM_DAILY_GAMES", "400")),
+        llm_daily_games=int(e("LLM_DAILY_GAMES", "500")),
         steam_api_key=e("STEAM_API_KEY", "").strip(),
         igdb_client_id=e("IGDB_CLIENT_ID", "").strip(),
         igdb_client_secret=e("IGDB_CLIENT_SECRET", "").strip(),

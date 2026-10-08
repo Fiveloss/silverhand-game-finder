@@ -133,6 +133,9 @@ def pick_caption(g: dict, pick: Pick, liked_name: str | None) -> str:
         praise = [escape(x["point"]) for x in pick.passport["praise"][:2]]
         if praise:
             why.append("Хвалят: " + ", ".join(praise) + ".")
+    reasons = why_lines(pick, liked_name)
+    if reasons:
+        why += ["", "🧠 <b>Почему в подборке</b>"] + reasons + ([""] if pick.evidence else [])
     for e in pick.evidence[:1]:
         hours = f", {int(e['hours'] + 0.5)} ч в игре" if e.get("hours") else ""
         why.append(f"<i>Игрок{hours}:</i> «{escape(e['text'][:220])}»")
@@ -141,6 +144,42 @@ def pick_caption(g: dict, pick: Pick, liked_name: str | None) -> str:
     if why:
         lines += [""] + why
     return _fit("\n".join(lines))
+
+
+def why_lines(pick: Pick, liked_name: str | None) -> list[str]:
+    """How the game got here, signal by signal: the shared genre, the model that proposed it,
+    the players who play both, how close the tags are."""
+    from . import genres
+    out = []
+    ref = f" с <b>{escape(liked_name)}</b>" if liked_name else ""
+    if pick.genres:
+        out.append(f"• Общий жанр{ref}: " + ", ".join(escape(genres.ru(f)) for f in pick.genres[:3]))
+    if pick.hooks_hit:
+        from .aspects import _C
+        names = [_C[h][0].lower() for h in pick.hooks_hit if h in _C]
+        out.append(f"• Сильна в том же, за что любят {('<b>' + escape(liked_name) + '</b>') if liked_name else 'образец'}: "
+                   + ", ".join(escape(n) for n in names))
+    if pick.format:
+        out.append("• Тот же формат: " + escape(genres.format_ru(pick.format)))
+    tags = pick.parts.get("tags")
+    if tags is not None and tags >= 0.5:
+        out.append(f"• Теги игроков совпадают на {round(tags * 100)}%")
+    if "scout" in pick.parts:
+        line = "• Предложила нейросеть по твоему запросу"
+        if pick.suggest_why and pick.judge_reason:
+            line += f": «{escape(pick.suggest_why[:160])}»"
+        out.append(line)
+    co = pick.parts.get("coplay")
+    if co is not None and co >= 0.3:
+        who = f"фанаты <b>{escape(liked_name)}</b>" if liked_name else "игроки с похожим вкусом"
+        out.append(f"• В неё много играют {who} (по открытым библиотекам Steam)")
+    exp = pick.parts.get("experience")
+    if exp is not None and exp >= 0.6:
+        out.append("• Отзывы игроков по смыслу близки к твоему запросу")
+    if pick.judge_reason:
+        sure = f": уверенность {pick.judge_fit}/10" if pick.judge_fit else ""
+        out.append(f"• Нейросеть-судья выбрала её из 12 кандидатов{sure}")
+    return out
 
 
 def game_caption(g: dict, p: dict, stats: dict | None = None) -> str:

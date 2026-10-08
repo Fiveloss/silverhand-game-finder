@@ -9,6 +9,8 @@ import math
 from dataclasses import dataclass, field
 
 from .analyst import AXES
+from .genres import defining as defining_genres, format_of
+from .titles import series_key
 
 # Tags that say almost nothing about taste.
 GENERIC_TAGS = {"Singleplayer", "Indie", "Great Soundtrack", "3D", "2D", "Colorful", "Atmospheric",
@@ -33,6 +35,12 @@ class Taste:
     weights: dict[str, float] = field(default_factory=dict)    # learned multipliers per score part
     vec: list[float] | None = None      # meaning of what they love (semantic.py): their words + liked games
     core: set[str] = field(default_factory=set)   # the references' defining tags: a candidate shares one
+    genres: set[str] = field(default_factory=set)  # the references' defining genre families (genres.py)
+    anchors: list[list[str]] = field(default_factory=list)  # per reference: its defining genres, main first
+    seed_names: list[str] = field(default_factory=list)    # the references' titles
+    formats: list[dict] = field(default_factory=list)       # per reference: genres.format_of(its tags)
+    seed_series: set[str] = field(default_factory=set)      # their series (titles.series_key)
+    hooks: list[str] = field(default_factory=list)          # what the reference is loved for (aspects groups)
 
     @property
     def ready(self) -> bool:
@@ -73,9 +81,20 @@ def for_request(req, seeds: list[dict], avoid: list[dict], passports: dict[int, 
             top = [x for x, _ in sorted((g.get("tags") or {}).items(), key=lambda kv: -kv[1])
                    if x not in GENERIC_TAGS and x not in muted][:5]
             t.core.update(top)
+            fmt = format_of(g.get("tags"))
+            if fmt:
+                t.formats.append(fmt)
+            anchor = defining_genres(g.get("tags"))
+            if anchor:
+                t.anchors.append(anchor)
+                t.genres.update(anchor)
             for tag, x in tag_vector(g.get("tags") or {}, idf).items():
                 t.like_vec[tag] = t.like_vec.get(tag, 0.0) + x * (0.25 if tag in muted else 1.0)
         t.played.add(g["appid"])
+        if g.get("name"):
+            t.seed_names.append(g["name"])
+            if series_key(g["name"]):
+                t.seed_series.add(series_key(g["name"]))
     for g in avoid:
         for tag, x in tag_vector(g.get("tags") or {}, idf).items():
             t.dislike_vec[tag] = t.dislike_vec.get(tag, 0.0) + x

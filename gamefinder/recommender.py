@@ -14,12 +14,11 @@ are spread out so three results are not three versions of the same game.
 
 import math
 import random
-import re
 from collections.abc import Callable
 import time
 from dataclasses import dataclass, field
 
-from . import titles
+from . import aspects, genres, titles
 from .analyst import AXES, heuristic_passport
 from .reviews import quality_score, wilson_lower
 from .taste import Taste, cosine, tag_vector
@@ -66,8 +65,12 @@ class Pick:
     evidence: list[dict] = field(default_factory=list)   # review snippets closest to their taste
     suggest_why: str = ""       # why the LLM proposed it (suggest.py), shown when the judge said nothing
     relaxed: bool = False       # filled in without the request's hard limits (not enough exact matches)
+    genres: list[str] = field(default_factory=list)    # genre families shared with the reference games
+    format: dict = field(default_factory=dict)          # format traits shared with a reference (genres.format_of)
+    hooks_hit: list[str] = field(default_factory=list)  # what the reference is loved for that this game is strong at too
     judge_reason: str = ""      # from the LLM judge (rerank.py), when it ran
     judge_risk: str = ""
+    judge_fit: int = 0          # the judge's 0-10 certainty; 0 = the judge did not see it
 
 
 class Catalog:
@@ -228,6 +231,12 @@ def recommend(catalog: Catalog, taste: Taste, passports: dict[int, dict], review
             continue    # nothing in common with what they love, and their fellow players don't play it
         if taste.core and co < 0.3 and not (taste.core & set(vec)):
             continue    # none of what defines the reference game (its top player tags)
+        if taste.seed_names and any(titles.same_game(s, g.get("name", "")) for s in taste.seed_names):
+            continue    # the reference itself in another edition
+        if taste.anchors and not genres.matches(taste.anchors, genres.present(g.get("tags"))):
+            continue    # not one of the reference's main genres: no vote, model's or players', makes it a match
+        if taste.formats and all(genres.format_clash(f, genres.format_of(g.get("tags")))[0] for f in taste.formats):
+            continue    # 2D for a 3D game, turn-based for a real-time one: a different way to play
         prior = quality_score(review_stats.get(appid)) if appid in review_stats else _spy_quality(g)
         pre.append((sim + 0.3 * prior + 0.3 * co, sim, appid))
     pre.sort(reverse=True)
@@ -244,6 +253,10 @@ def recommend(catalog: Catalog, taste: Taste, passports: dict[int, dict], review
             continue
         if limits and limits.get("surprise"):
             bonus += random.uniform(0, 0.25)     # shake the order: a different good game each time
+        fmt = genres.format_of(g.get("tags"))
+        if taste.formats and all(genres.format_clash(f, fmt)[1] for f in taste.formats):
+            bonus -= 0.06       # another camera: only a game that fits very well otherwise makes it
+        same_fmt = {k: v for k, v in fmt.items() if any(f.get(k) == v for f in taste.formats)}
         ff, matches = feel_fit(taste, p)
         stats = review_stats.get(appid)
         q = quality_score(stats) if stats else _spy_quality(g)
@@ -259,6 +272,12 @@ def recommend(catalog: Catalog, taste: Taste, passports: dict[int, dict], review
             parts["scout"], extra["scout"] = scout[appid], 0.2
         if appid in exp:
             parts["experience"], extra["experience"] = exp[appid], 0.18
+        hit = []
+        if taste.hooks:
+            # What the reference is loved for (story, builds, exploration...): is this game strong there?
+            st = aspects.strengths(g, p)
+            parts["hooks"], extra["hooks"] = sum(st.get(h, 0.0) for h in taste.hooks) / len(taste.hooks), 0.3
+            hit = [h for h in taste.hooks if st.get(h, 0.0) >= 0.6]
         cs = coplay(appid) if coplay else None
         if cs is not None:      # None = nobody harvested yet; 0.0 = data, but no link
             parts["coplay"], extra["coplay"] = min(1.0, cs / 0.6), 0.15
@@ -270,27 +289,26 @@ def recommend(catalog: Catalog, taste: Taste, passports: dict[int, dict], review
             total = sum(raw.values())
             w = {k: v / total for k, v in raw.items()}      # keep the sum at 1
         score = sum(w[k] * parts[k] for k in w) + bonus
+        shared = [f for f in genres.defining(g.get("tags"), n=5, share=0.2) if f in taste.genres]
         picks.append(Pick(appid, score, parts, p, real, feel_matches=matches,
-                          taste_notes=notes, warnings=warnings))
+                          taste_notes=notes, warnings=warnings, genres=shared or sorted(
+                              taste.genres & genres.present(g.get("tags"))), format=same_fmt, hooks_hit=hit))
         if len(picks) >= pool:
             break
     picks.sort(key=lambda x: -x.score)
-    chosen = diversify(picks, catalog, limit)
+    chosen = diversify(picks, catalog, limit, seed_series=taste.seed_series)
     for pick in chosen:
         pick.because = closest_liked(catalog, taste, pick.appid)
     return chosen
 
 
-def series_key(name: str) -> str:
-    """The series a title belongs to: its main part without sequel numbers
-    ("The Witcher 2: Assassins of Kings" -> "witcher", "Dead Space 2" -> "dead space")."""
-    main = re.split(r":| - | – | — ", name or "")[0]
-    return " ".join(w for w in titles.core(main).split() if not w.isdigit())
+series_key = titles.series_key
 
 
-def diversify(picks: list[Pick], catalog: Catalog, limit: int, penalty: float = 0.3) -> list[Pick]:
+def diversify(picks: list[Pick], catalog: Catalog, limit: int, penalty: float = 0.3,
+              seed_series: set[str] | frozenset = frozenset()) -> list[Pick]:
     """The best picks that are not alike: a tag-similarity penalty, and one game per series
-    (a sequel of the reference is fine; two more parts of one series make a lazy selection)."""
+    (a sequel of the reference is fine, but only one, and it goes last: the player surely knows it)."""
     chosen: list[Pick] = []
     series: set[str] = set()
 
@@ -311,7 +329,15 @@ def diversify(picks: list[Pick], catalog: Catalog, limit: int, penalty: float = 
         rest.remove(best)
         if key(best):
             series.add(key(best))
-    return chosen
+    return series_last(chosen, catalog, seed_series)
+
+
+def series_last(picks: list[Pick], catalog: Catalog, seed_series) -> list[Pick]:
+    """A game of the reference's own series moves to the end of the selection."""
+    if not seed_series:
+        return picks
+    own = [p for p in picks if series_key((catalog.games.get(p.appid) or {}).get("name", "")) in seed_series]
+    return [p for p in picks if p not in own] + own
 
 
 def closest_liked(catalog: Catalog, taste: Taste, appid: int) -> int | None:

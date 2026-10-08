@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.4.0 — 2026-10-08
+
+Genre and format first: picks a player can just play in order.
+
+- Each reference game is anchored by its most pronounced genres (`genres.py`: genre tags
+  with the most player votes, close ones as one family). A candidate shares its main genre
+  or two of its defining ones; the co-play graph and the scout no longer get around it
+  (Black Myth: Wukong for Resident Evil was the case).
+- Format from player tags: 2D vs 3D and turn-based vs real-time combat are hard rules,
+  another camera costs score.
+- The reference in another edition never comes up (Resident Evil 4 (2005) for the remake);
+  one game of its series at most, always last. One game per series in any selection.
+- Every card says why the game is there: the shared genre, the same format, how close the
+  player tags are, who proposed it (the scout, players of the reference, the judge).
+- Player slang for titles («резик», «фолыч», «сабнатика»…), in the lookup and the model's
+  reading of the request.
+- Reviews of the whole catalog: the background reads them on Gemini Flash Lite only (Groq's
+  small daily quota stays for the calls a player waits for). Flash Lite's free tier is about
+  500 calls a day: `LLM_DAILY_GAMES=500` lets the background take 400 and keeps the rest for players.
+- A second Groq model (`openai/gpt-oss-20b`, its own daily quota) answers when the main one is
+  out for the day.
+- What the reference is loved for: when the player does not say what hooked them, the bot takes
+  the reference's most praised strengths from its reviews (Cyberpunk 2077: story, builds,
+  atmosphere, exploration; never music, looks or setting) and steers by them. A new score part,
+  «strong at the same things» (30%), checks each candidate's own praise, feel and tags, and the
+  reference's setting tags are muted: a neon city alone (Cloudpunk) no longer makes a match.
+- The judge rates every candidate 0-10 (it used to choose a few and was too shy to name more than
+  one); the bot shows the best rated, 6 and up, in order. It sees the reference's main genres,
+  format and strengths, and may use what it surely knows about well-known games not read yet.
+  Fewer, but sure: no near-miss filler after the judge ran, and the panel says so.
+- Up to two more sure picks are kept back: «✅ Уже играл» or «👎 Не то» on a card brings the
+  next one at once, with no new search.
+- «🤔 Не та игра» under «Чем зацепила X?»: when the reference was found as another game, the
+  bot asks for the exact title.
+- `tools/golden.json` and `eval_picks.py --golden`: 30 requests with games that fit and games
+  that must never come up.
+
 ## 0.3.1 — 2026-10-08
 
 Faster picks: a request took 2–3 minutes once Gemini Flash's free quota (now about 20 calls
