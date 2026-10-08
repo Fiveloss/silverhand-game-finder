@@ -84,8 +84,14 @@ def matches(anchors: list[list[str]], have: set[str]) -> bool:
     return any(a and (a[0] in have or len(set(a) & have) >= 2) for a in anchors)
 
 
+EN = {"crpg": "party RPG", "builder": "building", "cards": "card game", "narrative": "story adventure",
+      "life": "life sim", "shmup": "shoot 'em up", "soulslike": "soulslike", "action rpg": "action RPG"}
+
+
 def ru(fam: str) -> str:
-    return RU.get(fam, fam)
+    """A genre family or tag as the player reads it: Russian for Russian players, else English."""
+    from .i18n import is_ru
+    return RU.get(fam, fam) if is_ru() else EN.get(fam, fam)
 
 
 # --- format: how the game is played on screen (dimension, combat timing, camera)
@@ -102,6 +108,8 @@ _FORMAT_TAGS = {
 }
 FORMAT_RU = {"2d": "2D", "3d": "3D", "turn": "пошаговые бои", "real": "бои в реальном времени",
              "first": "от первого лица", "third": "от третьего лица", "top": "вид сверху", "side": "вид сбоку"}
+FORMAT_EN = {"2d": "2D", "3d": "3D", "turn": "turn-based combat", "real": "real-time combat",
+             "first": "first-person", "third": "third-person", "top": "top-down", "side": "side view"}
 
 
 def format_of(tags: dict | None) -> dict[str, str]:
@@ -129,4 +137,7 @@ def format_clash(ref: dict[str, str], cand: dict[str, str]) -> tuple[bool, bool]
 
 
 def format_ru(fmt: dict[str, str]) -> str:
-    return ", ".join(FORMAT_RU[fmt[k]] for k in ("dim", "view", "combat") if fmt.get(k))
+    """The format in the player's language (the name stays from when it was Russian only)."""
+    from .i18n import is_ru
+    names = FORMAT_RU if is_ru() else FORMAT_EN
+    return ", ".join(names[fmt[k]] for k in ("dim", "view", "combat") if fmt.get(k))

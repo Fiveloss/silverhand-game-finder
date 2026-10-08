@@ -25,6 +25,7 @@ import re
 from dataclasses import asdict, dataclass, fields, replace
 
 from .analyst import AXES
+from .i18n import is_ru, tr
 
 KEY_RE = re.compile(r"^[a-z0-9_]{1,12}$")
 MAX_LABEL = 28
@@ -33,7 +34,7 @@ MAX_LABEL = 28
 @dataclass
 class Aspect:
     key: str                    # short stable id for callback data (≤ 12 chars, [a-z0-9_])
-    label: str                  # Russian button text ≤ 28 chars
+    label: str                  # button text ≤ 28 chars, in the player's language
     axes: dict[str, int]        # feel targets this aspect means, e.g. {"exploration": 9}
     tags: list[str]             # Steam tags it pulls
     words: str                  # Russian phrase for semantic matching
@@ -64,9 +65,9 @@ _C = {
               "живые запоминающиеся персонажи", r"персонаж|компаньон|напарник|character|харизм"),
     "emotion": ("Эмоции и драма", {"story": 8}, ["Emotional"], ["Sad", "Drama"],
                 "история, которая трогает до глубины души",
-                r"эмоци|трогат|до слез|грустн|\bдрам|плакал|emotional|душевн"),
+                r"эмоци|трогат|до слез|грустн|\bдрам|плакал|emotion|душевн|\bdrama"),
     "ideas": ("Глубокие темы", {"story": 7}, [], ["Philosophical", "Psychological", "Political"],
-              "заставляет думать о серьёзных вещах", r"философ|политик|психологи|о жизни|задума|philosoph"),
+              "заставляет думать о серьёзных вещах", r"философ|политик|психологи|о жизни|задума|philosoph|deep themes|\bthemes\b"),
     "humor": ("Юмор", {}, ["Comedy"], ["Funny", "Dark Humor", "Satire"], "смешно, остроумный юмор",
               r"юмор|смешн|\bшутк|\bшути|ржач|\bугар|funny|humou?r|комеди|сатир|абсурд"),
     "romance": ("Отношения и романы", {"story": 6}, ["Romance"], ["Dating Sim"],
@@ -94,7 +95,7 @@ _C = {
     "combat": ("Боевая система", {"combat": 8}, [],
                ["Combat", "Hack and Slash", "Character Action Game", "Souls-like", "Action"],
                "отточенные бои, в которых приятно драться",
-               r"\bбо[йиею]\b|\bбоя\b|\bбоев|сражен|\bдрак|драть|combat|\bfight|\bбитв|\bбосс|стрельб|перестрелк"),
+               r"\bбо[йиею]\b|\bбоя\b|\bбоев|сражен|\bдрак|драть|combat|\bfight|\bбитв|\bбосс|стрельб|перестрелк|\bshoot"),
     "challenge": ("Сложность и вызов", {"difficulty": 8}, ["Difficult"],
                   ["Souls-like", "Precision Platformer", "Masocore"],
                   "сложно, но честно: преодолевать настоящий вызов",
@@ -126,14 +127,14 @@ _C = {
     "build": ("Строить и крафтить", {"complexity": 6}, ["Crafting"],
               ["Base Building", "Building", "City Builder", "Automation"],
               "строить своё и крафтить из добытого",
-              r"\bстро[июя]|постро|стройк|крафт|craft|\bbuild|\bбаз[ауы]\b|\bзавод|автоматиз"),
+              r"\bстро[июя]|постро|стройк|крафт|craft|\bbuild|\bбаз[ауы]\b|\bзавод|автоматиз|automat"),
     "survival": ("Выживание", {"tension": 6}, ["Survival"], ["Open World Survival Craft"],
                  "выживать, добывать ресурсы и держаться до последнего", r"выжива|survival|ресурс|\bголод"),
     "farm": ("Своя ферма", {"tension": 3}, ["Farming Sim"], ["Agriculture", "Life Sim"],
              "растить свою ферму в своём темпе", r"\bферм|урожа|грядк|огород|\bfarm|выращива"),
     "friends": ("Игра с друзьями", {"social": 8}, ["Co-op"], ["Online Co-Op", "Local Co-Op", "Multiplayer"],
                 "весело играть вместе с друзьями",
-                r"\bдруз|\bдруг[оау]|кооп|co-?op|вместе|компани[яюей]|multiplayer|мультиплеер"),
+                r"\bдруз|\bдруг[оау]|кооп|co-?op|вместе|компани[яюей]|multiplayer|мультиплеер|\bfriends?\b"),
     "pvp": ("Соревнование с людьми", {"social": 9, "replay": 7}, ["PvP"], ["Competitive", "Multiplayer"],
             "соревноваться с живыми людьми", r"\bpvp|\bпвп|соревн|competitive|ранкед"),
     "replay": ("Реиграбельность", {"replay": 8}, ["Replay Value"],
@@ -141,11 +142,33 @@ _C = {
                "каждый забег разный, хочется ещё и ещё",
                r"реиграб|replay|\bзабег|рогалик|roguel|каждый раз по.?разному|перепроход"),
     "long": ("Хватает надолго", {"length": 9}, [], ["Open World", "Sandbox"],
-             "огромная игра на десятки и сотни часов", r"надолго|сотни час|длинн|много контента|залипнуть"),
+             "огромная игра на десятки и сотни часов", r"надолго|сотни час|длинн|много контента|залипнуть|\blasts\b|hundreds of hours"),
     "short": ("Короткая и ёмкая", {"length": 2}, ["Short"], [], "короткая и ёмкая, без воды",
               r"коротк|за вечер|пару вечеров|\bshort"),
 }
 CANON = {k: re.compile(v[5]) for k, v in _C.items()}
+# The button labels in English (each matches its own group's regex above).
+_EN = {
+    "story": "Story", "writing": "Writing and dialogue", "choices": "Choices and consequences",
+    "lore": "Lore and mysteries", "detective": "Investigation", "chars": "Characters",
+    "emotion": "Emotion and drama", "ideas": "Deep themes", "humor": "Humour",
+    "romance": "Romance and relationships", "explore": "Exploring the world", "atmos": "Atmosphere",
+    "visual": "Visual style", "music": "Music", "setting": "Setting", "tension": "Tension and fear",
+    "cozy": "Cozy and calm", "combat": "Combat system", "challenge": "Difficulty and challenge",
+    "easy": "Easy to just play", "speed": "Fast-paced action", "slow": "Slow, unhurried pace",
+    "depth": "Deep mechanics", "tactics": "Tactics", "deck": "Deckbuilding", "puzzle": "Puzzles",
+    "platform": "Platforming", "stealth": "Stealth", "freedom": "Freedom", "build": "Building and crafting",
+    "survival": "Survival", "farm": "Your own farm", "friends": "Playing with friends",
+    "pvp": "PvP competition", "replay": "Replay value", "long": "Lasts for hundreds of hours",
+    "short": "Short and tight",
+}
+
+
+def aspect_name(group: str) -> str:
+    """A canonical group's button label in the player's language ("" for an unknown group)."""
+    if group not in _C:
+        return ""
+    return _C[group][0] if is_ru() else _EN[group]
 
 # Player tag -> (group, weight, label override). Weight: how much the tag says about why people love it.
 TAG_MAP: dict[str, tuple[str, float, str | None]] = {
@@ -203,6 +226,20 @@ TAG_MAP: dict[str, tuple[str, float, str | None]] = {
     "Underwater": ("setting", 0.9, "Подводный мир"), "Mythology": ("setting", 0.8, "Мифология"),
     "Vampire": ("setting", 0.8, "Вампиры"), "Historical": ("setting", 0.6, "История"),
     "Zombies": ("setting", 0.5, "Зомби"),
+}
+
+# The label overrides above in English.
+TAG_LABEL_EN = {
+    "Dark": "Dark atmosphere", "Hand-drawn": "Hand-drawn art", "Pixel Graphics": "Pixel art",
+    "Anime": "Anime visuals", "Dark Humor": "Dark humour", "Open World": "Open world",
+    "Sandbox": "Sandbox freedom", "Immersive Sim": "Freedom of choice", "Shooter": "Shooting",
+    "FPS": "Shooting", "Psychological Horror": "Psychological horror", "City Builder": "Build your own city",
+    "Automation": "Automation", "Grand Strategy": "Strategic depth", "CRPG": "RPG depth", "RPG": "RPG depth",
+    "Cyberpunk": "Cyberpunk world", "Dark Fantasy": "Dark fantasy", "Post-apocalyptic": "Post-apocalypse",
+    "Space": "Space", "Lovecraftian": "Cthulhu mythos", "Sci-fi": "Science fiction",
+    "Steampunk": "Steampunk", "Medieval": "The Middle Ages", "Noir": "Noir", "Western": "The Wild West",
+    "Underwater": "Underwater world", "Mythology": "Mythology", "Vampire": "Vampires",
+    "Historical": "History", "Zombies": "Zombies",
 }
 
 # Strong feel axes -> group: (axis, high side?, threshold).
@@ -268,6 +305,8 @@ def _game_tags(game: dict | None) -> dict[str, float]:
 def canonical(group: str, game_tags=None, *, label: str | None = None, extra_tags=()) -> Aspect:
     """The canonical aspect of a group, with the alt tags the game actually has."""
     lab, axes, core, alt, words, _ = _C[group]
+    if not is_ru():
+        lab = _EN[group]
     have = set(game_tags or ())
     tags = _uniq([*core, *extra_tags, *(t for t in alt if t in have)])[:5]
     return Aspect(group, _short(label or lab), dict(axes), tags, words, group)
@@ -320,6 +359,8 @@ def options(game: dict, passport: dict | None, card_aspects: list[dict] | None =
     for tag, votes in ranked:
         if tag in TAG_MAP:
             group, w, label = TAG_MAP[tag]
+            if label and not is_ru():
+                label = TAG_LABEL_EN.get(tag, label)
             add(group, w * (0.6 + 1.6 * votes / top), label, tag)
     p = passport or {}
     for pr in p.get("praise") or []:
@@ -363,7 +404,7 @@ def options(game: dict, passport: dict | None, card_aspects: list[dict] | None =
                 continue
         a = canonical(group, tags, label=label, extra_tags=[t for _, _, t in items if t])
         if group == "atmos" and "Dark" in tags and label is None:
-            a.label = "Мрачная атмосфера"
+            a.label = tr("Dark atmosphere", "Мрачная атмосфера")
         groups.append((total, a))
     groups.sort(key=lambda x: -x[0])
     for _, a in groups:
@@ -421,7 +462,8 @@ def _same(a: Aspect, b: Aspect) -> bool:
 def _from_card(c: dict, i: int, game_tags: dict) -> Aspect | None:
     if not isinstance(c, dict):
         return None
-    raw = str(c.get("label_ru") or c.get("label") or "").strip()
+    raw = str((c.get("label_ru") if is_ru() else c.get("label_en")) or c.get("label") or c.get("label_ru")
+              or "").strip()
     words = str(c.get("words_ru") or c.get("words") or raw).strip()
     if not raw or JUNK.match(_norm(raw).strip(" .!")):
         return None
@@ -497,15 +539,19 @@ def _toward_seed(v: int, seed_v) -> int:
 # --- free-text answer: «атмосфера и сюжет, а бои так себе»
 
 _ALL = re.compile(r"^\W*(все|всё|всего|вс[её] сразу|вс[её] вместе|вс[её] понравилось|вс[её] целиком|"
-                  r"целиком|в целом)\W*$")
+                  r"целиком|в целом|all|all of it|everything|the whole thing|as a whole)\W*$")
 _CLAUSE = re.compile(r"[,.;!?()\n—–]|\s-\s|\bа\b|\bно\b|\bзато\b|\bоднако\b|\bхотя\b|\bbut\b|(?=\bкроме\b)")
 _POS_PHRASES = re.compile(r"\bне мог\w* оторваться|\bне оторваться|\bне отпуска\w*|\bне только|\bне надоеда\w*|"
                           r"\bне устаешь|\bне скучн\w*")
 _STRONG = re.compile(r"\bне понрав|\bне нрав|\bне любл|\bне зашл|\bне зашел|\bне хочу|\bне надо|бесил|бесит|бесят|"
                      r"раздраж|напряга|ненавиж|надоел|утомл|задолбал|достал|устал|слишком|перебор|\bдушн|"
-                     r"\bбез\b|\bминус|\bне для меня|мешал|\bhate|\bхуже|\bужасн\w* (был|бои|сложн)")
+                     r"\bбез\b|\bминус|\bне для меня|мешал|\bhate|\bхуже|\bужасн\w* (был|бои|сложн)|"
+                     r"\bdidn'?t like|\bdon'?t like|\bnot a fan|\bannoy|\btoo much|\bboring|\btedious|"
+                     r"\bdon'?t want|\bwithout\b|\bno more\b")
 _MILD = re.compile(r"так себе|\bне особо|\bне очень|неважн|\bне важн|\bне главн|\bне главное|пофиг|вс[её] равно|"
-                   r"без разницы|\bне сильно|средне|\bкроме\b|^\s*не\b|\bне в\b|\bнормальн")
+                   r"без разницы|\bне сильно|средне|\bкроме\b|^\s*не\b|\bне в\b|\bнормальн|"
+                   r"\bnot really|\bdoesn'?t matter|\bdon'?t care|\bmeh\b|\bso-so|\bwhatever|\bexcept\b|"
+                   r"\bnot the point|\bnot important")
 _STOP = ("понрав", "нрав", "зацеп", "любл", "обожа", "очень", "больше", "всего", "особенн", "сильн", "именно",
          "было", "была", "были", "игра", "игре", "игры", "игру", "мне", "меня", "это", "как", "что", "все",
          "тоже", "еще", "просто", "вообще", "прям", "там", "тут", "его", "она", "они", "самое", "самый",
@@ -540,7 +586,7 @@ def from_text(text: str, opts: list[Aspect]) -> list[Aspect]:
             continue
         cleaned = _POS_PHRASES.sub(" ", clause)
         pol = -1 if _STRONG.search(cleaned) else 0 if _MILD.search(cleaned) else 1
-        if pol == 1 and re.search(r"(^|\s)(все|всё)(\s|$)", clause) and not _content(clause, []):
+        if pol == 1 and re.search(r"(^|\s)(все|всё|everything)(\s|$)", clause) and not _content(clause, []):
             everything = True
         hits: list[tuple[int, int]] = []
         groups_hit = set()
@@ -641,7 +687,7 @@ def _infer_axes(text: str) -> dict[str, int]:
 # --- bot helpers: question, keyboard, session state
 
 def question(name: str) -> str:
-    return f"Чем именно зацепила {name}?"
+    return tr(f"What exactly hooked you in {name}?", f"Чем именно зацепила {name}?")
 
 
 def keyboard(opts: list[Aspect], picked=()) -> list[list[tuple[str, str]]]:
@@ -662,7 +708,7 @@ def keyboard(opts: list[Aspect], picked=()) -> list[list[tuple[str, str]]]:
             row = []
     if row:
         rows.append(row)
-    rows.append([("Всё сразу", "asp:all")] + ([("Готово", "asp:done")] if picked else []))
+    rows.append([(tr("All of it", "Всё сразу"), "asp:all")] + ([(tr("Done", "Готово"), "asp:done")] if picked else []))
     return rows
 
 

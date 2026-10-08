@@ -52,8 +52,8 @@ another genre), not just any survival or shooter game. Weigh every loved aspect 
 Never propose a game from the "do_not_propose" list or another edition of it.
 - Variety: at most 2 games from one series or franchise; mix well-known games with lesser-known ones.
 - title: the exact official English title as on Steam, without year, platform or edition notes.
-- why: one sentence in Russian, at most 160 characters: what in this game gives what the player \
-loved (name the aspect, be concrete). No marketing words, no "идеально", no links.
+- why: one sentence in {lang}, at most 160 characters: what in this game gives what the player \
+loved (name the aspect, be concrete). No marketing words, no "perfect" / "идеально", no links.
 - fit: 0.0-1.0, how surely this game gives what the player loved.
 - series: the series or franchise name, or "" for a standalone game.
 - Best fit first. If fewer than {n} games truly fit, return fewer: do not pad the list.
@@ -162,7 +162,8 @@ def build_prompt(req, seed_names: list[str], exclude_names: list[str]) -> str:
 
 
 def system_prompt(n: int) -> str:
-    return SYSTEM.format(n=n)
+    from .i18n import prompt_lang
+    return SYSTEM.format(n=n, lang=prompt_lang())
 
 
 # --- validating the answer

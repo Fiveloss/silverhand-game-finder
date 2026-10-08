@@ -8,8 +8,6 @@
   <a href="#how-to-use">How to use</a>
   ·
   <a href="#how-it-works">How it works</a>
-  ·
-  <a href="README.ru.md">Русский</a>
 </p>
 
 <p align="center">
@@ -47,13 +45,12 @@ and you asked for something calm, that counts for it.
 
 - 💬 **A request in your own words**: reference games ("like …"), what to stay away
   from ("just not like …", "not a shooter"), length ("for an evening", "to sink into
-  for weeks"), difficulty, co-op, and dealbreakers ("no MTX", "in Russian", "for Steam
+  for weeks"), difficulty, co-op, and dealbreakers ("no MTX", "offline", "for Steam
   Deck"). Without model keys, keyword rules read the request
-- 🎯 **Three quick questions, all skippable**: «Чем именно зацепила X?» (What exactly
-  hooked you?) with options for that very game (for Hollow Knight: exploration,
-  atmosphere, the hand-drawn look, combat, difficulty), «Что точно не надо?» (What
-  to avoid?) and «Сколько есть времени?» (How much time?). Tap buttons or answer in
-  words ("the atmosphere and exploration, the difficulty drove me mad")
+- 🎯 **Three quick questions, all skippable**: "What exactly hooked you in X?" with
+  options for that very game (for Hollow Knight: exploration, atmosphere, the hand-drawn
+  look, combat, difficulty), "Anything to avoid?" and "How much time do you have?". Tap
+  buttons or answer in words ("the atmosphere and exploration, the difficulty drove me mad")
 - 🪟 **One panel, no clutter**: the home screen, the questions, the search progress and
   the controls live in one message that is edited in place and moves under the newest
   cards. Game suggestions come as separate card messages
@@ -87,6 +84,8 @@ and you asked for something calm, that counts for it.
   keys are free, need no card, and are optional: without them the bot runs on heuristics
 - 🙈 **Remembers nothing about your taste**: only your Steam region (for prices) and
   the current request; every new request starts from scratch
+- 🌐 **Your language**: the first `/start` asks for it, English first; `/lang` changes it.
+  Buttons, cards, game breakdowns and the AI's reasons all come in it
 - 🔒 **Friends only**: the owner lets people in with one tap
 - 🪶 **Light**: one process, SQLite, at most 300 MB of RAM, a daily backup of its own
 
@@ -97,32 +96,29 @@ ratings and, optionally, IGDB and Reddit discussions.
 
 ## How to use
 
-The bot speaks Russian; button names below are given with a translation.
-
-1. Write what you feel like playing now, or tap a mood on the home screen:
-   **🎯 Похожее на игру** (Like a game), **🌙 На вечер** (For an evening),
-   **♾ Залипнуть надолго** (Something long), **🤝 С другом** (With a friend),
-   **😌 Расслабиться** (Chill), **🔥 Челлендж** (Challenge), **📖 Сюжет** (Story),
-   **💎 Жемчужины** (Hidden gems), **🎲 Удиви меня** (Surprise me). A mood button
-   searches at once.
-2. Before the first search the bot asks your Steam account's region (Russia,
-   Kazakhstan, Ukraine, Belarus, USA, Europe, UK, Turkey or any two-letter code).
-   Change it later with **🌍 Регион Steam** (Steam region) on the home screen.
-3. Answer the questions or skip them with **⚡ Подобрать сейчас** (Pick now):
-   «Чем именно зацепила X?» (only when you named a game: toggle options, «Всё сразу»
-   for all of it, or answer in words), «Что точно не надо?» (horror, shooters, hard,
-   grind, MTX, reading, online and PvP, no Russian, early access; what you already
-   wrote is ticked) and «Сколько есть времени?» (an evening, a couple of evenings, a
-   week, long, doesn't matter; skipped when the request already says).
-4. A selection banner and three cards arrive. Under each: **🔎 Подробно** (Details:
-   the game's passport), **Steam ↗**, **✅ Уже играл** (Already played), **👎 Не то**
-   (Not this). Below them the panel asks «Подкрутить?» (Adjust?) with the refine
-   buttons, **🔄 Ещё 3** (Three more) and **◂ В начало** (Home). Typing anything here
-   corrects the current request.
-5. If nothing fits, the bot says so and offers **Снять исключения** (Drop the
-   exclusions), **Любая длина** (Any length) and **Совсем другое** (Something else).
-6. **🔎 Разбор игры** (Game breakdown) or `/game` gives the passport of any game by name
-   (Russian or English), with **🎯 Найти похожие** (Find similar) under it.
+1. On the first `/start` pick your language (**🇬🇧 English** comes first). Change it any
+   time with **🌐 Language** on the home screen or `/lang`.
+2. Write what you feel like playing now, or tap a mood on the home screen:
+   **🎯 Like a game**, **🌙 For an evening**, **♾ Something long**, **🤝 With a friend**,
+   **😌 Chill**, **🔥 Challenge**, **📖 Story**, **💎 Hidden gems**, **🎲 Surprise me**.
+   A mood button searches at once.
+3. Before the first search the bot asks your Steam account's region (USA, Europe, UK,
+   Turkey, Kazakhstan or any two-letter code). Change it later with **🌍 Steam region** on
+   the home screen.
+4. Answer the questions or skip them with **⚡ Pick now**: "What exactly hooked you in X?"
+   (only when you named a game: toggle options, **All of it**, or answer in words),
+   "Anything to avoid?" (horror, shooters, hard, grind, microtransactions, reading, online
+   and PvP, early access; what you already wrote is ticked) and "How much time do you
+   have?" (an evening, a couple of evenings, a week, long, doesn't matter; skipped when the
+   request already says).
+5. A selection banner and three cards arrive. Under each: **🔎 Details** (the game's
+   passport), **Steam ↗**, **✅ Played it**, **👎 Not this**. Below them the panel asks
+   "Fine-tune?" with the refine buttons, **🔄 Three more** and **◂ Home**. Typing anything
+   here corrects the current request.
+6. If nothing fits, the bot says so and offers **Drop the exclusions**, **Any length** and
+   **Something else**.
+7. **🔎 Game breakdown** or `/game` gives the passport of any game by name, with
+   **🎯 Find similar** under it.
 
 Your own messages are deleted once read, so the chat holds only the cards and the panel.
 
@@ -133,19 +129,20 @@ Your own messages are deleted once read, so the chat holds only the cards and th
 | Command | What it does |
 |---|---|
 | `/find` | the home screen: write a request or tap a mood |
-| `/game` | a game's breakdown from its reviews (same as **🔎 Разбор игры**) |
+| `/game` | a game's breakdown from its reviews (same as **🔎 Game breakdown**) |
+| `/lang` | the language: English or another one the bot speaks |
 | `/help` | how it works |
 | `/start` | a greeting and the home screen |
 | any text | a request in your own words, or a correction of the current one |
 
 | Button under a selection | What it changes |
 |---|---|
-| Покороче (Shorter) | at most 60% of the shown games' typical length (or of the current limit) |
-| Попроще / Посложнее (Easier / Harder) | difficulty 2 below or above the games shown |
-| Сюжетнее (More story) | story 2 above the games shown (at least 7/10), and the Story Rich tag |
-| Спокойнее (Calmer) | tension up to 3, difficulty at most 6 out of 10 |
-| Совсем другое (Something else) | no pull towards the references and the games shown; their shared tags count against |
-| 🔄 Ещё 3 (Three more) | the next three for the same request |
+| Shorter | at most 60% of the shown games' typical length (or of the current limit) |
+| Easier / Harder | difficulty 2 below or above the games shown |
+| More story | story 2 above the games shown (at least 7/10), and the Story Rich tag |
+| Calmer | tension up to 3, difficulty at most 6 out of 10 |
+| Something else | no pull towards the references and the games shown; their shared tags count against |
+| 🔄 Three more | the next three for the same request |
 
 The request's limits stay, and games already shown don't come back. A written
 correction is merged into the request: what it mentions wins, the rest stays; naming
@@ -153,8 +150,7 @@ a new game starts a new search.
 
 **What's in a passport:** the real genre next to the store genre; reviews of all time,
 recent, among players with 10+ hours, and the share of negatives within 2 hours of
-play; the GOG rating; length; Russian (text, audio); price in your region; Steam
-Deck compatibility; what you do minute to minute; all 12 axes; what is praised and what
+play; the GOG rating; length; price in your region; Steam Deck compatibility; what you do minute to minute; all 12 axes; what is praised and what
 is criticised, with taste complaints marked as such; how the game is now, who it suits,
 who should skip it, what it is compared to.
 
@@ -177,7 +173,7 @@ flowchart LR
 
 - **The catalog.** Once a day the bot walks Steam's store lists: top sellers, top
   rated and popular new releases. For each game it fetches SteamSpy's tags (voted by
-  players, which is the "real genre") and the store facts: Russian text and audio,
+  players, which is the "real genre") and the store facts: languages and voice-over,
   early access, in-app purchases, co-op, DRM, 18+, plus Steam's Deck Verified report
   and ProtonDB's crowd rating. Games with 200+ reviews are recommendable. The
   background work steps aside while a player is waiting, since both share Steam's
@@ -202,7 +198,7 @@ flowchart LR
   weaker. Whatever "drove them mad" counts against. The exclusions and the time answer
   become dealbreakers, tags to avoid, axis limits and hours.
 - **Reviews.** Four requests to Steam per game: recent reviews in all languages, recent
-  English and Russian ones, and the most helpful of the past year. From them: the
+  ones in the players' main languages, and the most helpful of the past year. From them: the
   positive share of all time and among recent reviews, among players with 10+ hours,
   the share of negatives from players under 2 hours (the refund window), and the median
   hours of happy players. Rankings use the Wilson lower bound: 9 out of 10 ranks below
@@ -248,7 +244,7 @@ flowchart LR
   co-play graph nor the scout: a game everyone plays is no match for Resident Evil unless
   it is a horror game too. The reference itself in another edition never comes up; one
   game of its series at most, and always last.
-- **What it is loved for.** Without the player's own answer to «Чем зацепила?», the bot takes
+- **What it is loved for.** Without the player's own answer to "What hooked you?", the bot takes
   what the reference's reviews praise most (story, builds, exploration…; never music, looks or
   setting) and scores each candidate on being strong at the same things.
 - **Picking.** Tag similarity is the cosine between SteamSpy tag vectors weighted by
@@ -266,7 +262,7 @@ flowchart LR
   without the hard limits fill in, marked as a compromise.
 - **The judge.** With a key and quota left, the model reads the top dozen candidates
   next to the request (tag-only ones say so) and picks three, with a concrete reason and
-  a risk for each (the card says "выбор ИИ", AI pick). Passports are data to it, never
+  a risk for each (the card says "AI pick"). Passports are data to it, never
   instructions.
 - **Prices.** Before each selection the bot asks Steam's store for the current price
   and discount in the player's region, cached for an hour; a game the region doesn't
@@ -352,15 +348,15 @@ the tests and restarts the service; the database in `data/` and `.env` stay.
 
 Every key except `BOT_TOKEN` is optional: set one, several or none (then heuristics
 only). Step-by-step instructions for getting them and the free-tier limits are in
-[`.env.example`](.env.example) (in Russian).
+[`.env.example`](.env.example).
 
 Owner commands in the private chat: `/stats` (catalog, analysis queue, model usage per
 day) and `/allow <id>`. When a stranger writes to the bot, they get their id, and the
 owners get a card with a "let in" button.
 </details>
 
-Texts and pictures for the bot's @BotFather profile are in
-[docs/botfather.md](docs/botfather.md) (in Russian).
+What to set in @BotFather and what the bot sets itself (its description, about text and
+command menu, in each language): [docs/botfather.md](docs/botfather.md).
 
 ## Development
 

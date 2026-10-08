@@ -16,6 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from PIL import Image, ImageDraw  # noqa: E402
 
 from gamefinder import render as R  # noqa: E402
+from gamefinder import i18n  # noqa: E402
+i18n.set_lang("ru")     # these tests check the Russian texts; English has tests of its own
 from gamefinder import views  # noqa: E402
 from gamefinder.analyst import AXES, normalize  # noqa: E402
 from gamefinder.recommender import Pick  # noqa: E402
@@ -205,7 +207,7 @@ def test_game_card_full_view():
 
 def test_game_card_twelve_axes():
     v = full_game_view()
-    assert [x[0] for x in v["feel"]] == [views.AXIS_LABEL[k].capitalize() for k in AXES]
+    assert [x[0] for x in v["feel"]] == [views.axis_label(k).capitalize() for k in AXES]
     game("12 axes", v, COVER)
     for n in (1, 2, 5, 11, 13, 20):
         game(f"{n} axes", dict(v, feel=(v["feel"] * 2)[:n]), None)

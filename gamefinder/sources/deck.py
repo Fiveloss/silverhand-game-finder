@@ -71,6 +71,7 @@ PASSED = {
 }
 
 DECK_RU = {DECK_VERIFIED: "проверено", DECK_PLAYABLE: "играбельно", DECK_UNSUPPORTED: "не поддерживается"}
+DECK_EN = {DECK_VERIFIED: "verified", DECK_PLAYABLE: "playable", DECK_UNSUPPORTED: "unsupported"}
 
 
 def _humanize(token: str) -> str:
@@ -191,13 +192,15 @@ def deck_fields(deck: dict | None, proton: dict | None) -> dict:
 
 
 def deck_label(deck: int, proton: str) -> str:
-    """One Russian line for the game card, '' when nothing is known."""
+    """One line for the game card in the player's language, '' when nothing is known."""
+    from ..i18n import is_ru, tr
+    names = DECK_RU if is_ru() else DECK_EN
     parts = []
-    if deck in DECK_RU:
-        parts.append(f"Steam Deck: {DECK_RU[deck]}")
+    if deck in names:
+        parts.append(f"Steam Deck: {names[deck]}")
     proton = (proton or "").lower()
     if proton == "native":
-        parts.append("Linux: нативная версия")
+        parts.append(tr("Linux: native", "Linux: нативная версия"))
     elif proton in PROTON_TIERS:
         parts.append(f"ProtonDB: {proton}")
     return " · ".join(parts)

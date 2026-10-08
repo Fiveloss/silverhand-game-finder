@@ -340,17 +340,20 @@ def _encode(scene: Scene, fps: int = FPS, seconds: float = SECONDS) -> bytes | N
 
 def _preview() -> None:
     """assets/brand/cards/pick-1.mp4 and pick-1-preview.gif from the README's pick-1 card."""
-    from .analyst import AXES
-    from .texts import AXIS_LABEL
+    from .analyst import axis_ends
+    from .i18n import set_lang
+    from .texts import axis_label
+
+    set_lang("en")
 
     out = render.ROOT / "assets" / "brand" / "cards"
     cov_path = render.ROOT / "data" / "covers" / "753640.jpg"
     cov = cov_path.read_bytes() if cov_path.is_file() else None
-    feel = [(AXIS_LABEL[k].capitalize(), v, *AXES[k])
+    feel = [(axis_label(k).capitalize(), v, *axis_ends(k))
             for k, v in {"pace": 3, "story": 9, "exploration": 10, "difficulty": 4}.items()]
-    view = {"rank": 1, "name": "Outer Wilds", "match": 0.91, "genres": ["Исследование", "Головоломка", "Космос"],
-            "feel": feel, "recent": "96%", "reviews_total": 112834, "hours": "~22 ч",
-            "price": "2 590 KZT (−40%)", "deck": "Steam Deck: проверено", "judge": True, "warning": ""}
+    view = {"rank": 1, "name": "Outer Wilds", "match": 0.91, "genres": ["Exploration", "Puzzle", "Space"],
+            "feel": feel, "recent": "96%", "reviews_total": 112834, "hours": "~22 h",
+            "price": "$14.99 (−40%)", "deck": "Steam Deck: verified", "judge": True, "warning": ""}
     t0 = time.perf_counter()
     data = pick_card_mp4(view, cov)
     if not data:

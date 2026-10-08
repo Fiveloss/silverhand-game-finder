@@ -10,7 +10,8 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import BotCommand, BotCommandScopeChat
 
-from .bot import COMMANDS, OWNER_COMMANDS, App, build_router
+from . import profile
+from .bot import App, build_router, commands
 from .config import load_config
 from .db import Db
 from .http import Http
@@ -33,10 +34,13 @@ async def run() -> None:
     dp = Dispatcher()
     dp.include_router(build_router(app))
 
-    await bot.set_my_commands([BotCommand(command=c, description=d) for c, d in COMMANDS])
+    # English by default; Telegram shows the Russian menu to people whose app is in Russian.
+    await bot.set_my_commands([BotCommand(command=c, description=d) for c, d in commands("en")])
+    await bot.set_my_commands([BotCommand(command=c, description=d) for c, d in commands("ru")], language_code="ru")
+    await profile.apply(bot, cfg.open_access)       # the description and the about text, in both languages
     for owner in cfg.owner_ids:
         try:
-            await bot.set_my_commands([BotCommand(command=c, description=d) for c, d in OWNER_COMMANDS],
+            await bot.set_my_commands([BotCommand(command=c, description=d) for c, d in commands("en", owner=True)],
                                       scope=BotCommandScopeChat(chat_id=owner))
         except Exception as e:
             log.warning("owner commands for %s: %s", owner, e)

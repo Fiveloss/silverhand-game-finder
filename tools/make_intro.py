@@ -2,7 +2,7 @@
 animations of the bot's menu screens and the README banner.
 
     python tools/make_intro.py           -> assets/brand/botfather-description.gif and .mp4
-    python tools/make_intro.py --menu    -> assets/menu/<screen>.mp4 and .gif, one per screen in MENU
+    python tools/make_intro.py --menu    -> assets/menu/<lang>/<screen>.mp4 and .gif, per language and screen
     python tools/make_intro.py --banner  -> assets/brand/banner.png (1280x640, a still)
 
 Adapted from SilverhandBuysBot/tools/make_intro.py, in the Game Finder amber.
@@ -49,17 +49,25 @@ MONO_FONTS = [
     "C:/Windows/Fonts/consolab.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
 ]
-# Menu screens of the bot: key -> (title, line under it). The bot can show
-# assets/menu/<key>.mp4 above the screen's text.
+# Menu screens of the bot, per language: key -> (title, line under it). The bot shows
+# assets/menu/<lang>/<key>.mp4 above the screen's text.
 MENU = {
-    "start":   ("SILVERHAND GAME FINDER", "ИГРЫ ПО ЧЕСТНЫМ ОТЗЫВАМ"),
-    "pick":    ("ПОДБОРКА", "ИГРЫ ПОД ТВОЙ ВКУС"),
-    "game":    ("РАЗБОР ИГРЫ", "ПЛЮСЫ · МИНУСЫ · ВЕРДИКТ"),
-    "help":    ("ПОМОЩЬ", "КАК РАБОТАЕТ ПОДБОР"),
+    "en": {
+        "start":   ("SILVERHAND GAME FINDER", "GAMES PICKED BY HONEST REVIEWS"),
+        "pick":    ("YOUR PICKS", "GAMES FOR YOUR TASTE"),
+        "game":    ("GAME BREAKDOWN", "PROS · CONS · VERDICT"),
+        "help":    ("HELP", "HOW THE PICKING WORKS"),
+    },
+    "ru": {
+        "start":   ("SILVERHAND GAME FINDER", "ИГРЫ ПО ЧЕСТНЫМ ОТЗЫВАМ"),
+        "pick":    ("ПОДБОРКА", "ИГРЫ ПОД ТВОЙ ВКУС"),
+        "game":    ("РАЗБОР ИГРЫ", "ПЛЮСЫ · МИНУСЫ · ВЕРДИКТ"),
+        "help":    ("ПОМОЩЬ", "КАК РАБОТАЕТ ПОДБОР"),
+    },
 }
 MENU_EYEBROW = "// SILVERHAND · GAME FINDER"
 # the start screen already says SILVERHAND GAME FINDER in its title
-MENU_EYEBROW_FOR = {"start": "// TELEGRAM-БОТ · ПОДБОР ИГР"}
+MENU_EYEBROW_FOR = {"en": {"start": "// TELEGRAM BOT · GAME PICKS"}, "ru": {"start": "// TELEGRAM-БОТ · ПОДБОР ИГР"}}
 # What pops up over the grid: decoration, not real data. ("tile", art) is a
 # small game cover, ("stars", n) a rating, ("text", s) a share of positive reviews.
 POPS = [("tile", "ghost"), ("stars", 5), ("text", "+94%"), ("tile", "planet"),
@@ -493,8 +501,8 @@ def encode(frames, W, H, fps, out_gif, out_mp4, crf=18):
 
 def banner_scene(logo):
     """The README banner: laid out at 640x320, drawn at 4x, delivered at 1280x640."""
-    sc = Scene(640, 320, 4, "SILVERHAND GAME FINDER", "// TELEGRAM-БОТ · ПОДБОР ИГР",
-               "ИГРЫ ПО ЧЕСТНЫМ ОТЗЫВАМ ИГРОКОВ", logo, logo_px=124)
+    sc = Scene(640, 320, 4, "SILVERHAND GAME FINDER", "// TELEGRAM BOT · GAME PICKS",
+               "GAMES PICKED BY HONEST PLAYER REVIEWS", logo, logo_px=124)
     sc.W, sc.H = 1280, 640
     return sc
 
@@ -503,7 +511,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--title", default="GAME FINDER")
     ap.add_argument("--eyebrow", default="// SILVERHAND")
-    ap.add_argument("--sub", default="ИГРЫ ПО ЧЕСТНЫМ ОТЗЫВАМ")
+    ap.add_argument("--sub", default="GAMES PICKED BY HONEST REVIEWS")
     ap.add_argument("--out", default=str(BRAND / "botfather-description"),
                     help="output path without extension")
     ap.add_argument("--width", type=int, default=640)
@@ -529,9 +537,11 @@ def main():
     H = (W * 9 // 16) // 2 * 2
     n = max(2, round(a.fps * a.seconds))
     if a.menu:
-        Path(a.menu_dir).mkdir(parents=True, exist_ok=True)
-        jobs = [(Path(a.menu_dir) / key, MENU_EYEBROW_FOR.get(key, MENU_EYEBROW), title, sub, not a.no_gif, True)
-                for key, (title, sub) in MENU.items()]
+        jobs = []
+        for lang, screens in MENU.items():
+            (Path(a.menu_dir) / lang).mkdir(parents=True, exist_ok=True)
+            jobs += [(Path(a.menu_dir) / lang / key, MENU_EYEBROW_FOR[lang].get(key, MENU_EYEBROW), title, sub,
+                      not a.no_gif, True) for key, (title, sub) in screens.items()]
     else:
         jobs = [(Path(a.out), a.eyebrow, a.title, a.sub, True, not a.no_mp4)]
     for out, eyebrow, title, sub, want_gif, want_mp4 in jobs:

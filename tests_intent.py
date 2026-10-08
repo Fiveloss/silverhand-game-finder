@@ -11,6 +11,8 @@ import traceback
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from gamefinder.analyst import AXES, Analyst, Provider  # noqa: E402
+from gamefinder import i18n  # noqa: E402
+i18n.set_lang("ru")     # these tests check the Russian texts; English has tests of its own
 from gamefinder.intent import (ALLOWED_TAGS, LOOSEN, REFINES, VOCAB, Request, coerce, hours_label,  # noqa: E402
                                hours_to_length, length_to_hours, parse, parse_heuristic, passport_hours, refine,
                                system_prompt)
@@ -377,8 +379,13 @@ def test_refine_all_buttons_and_unknown():
     same = refine(base, "explode", SHOWN)
     assert same == base and same is not base and same.axes is not base.axes
     assert list(REFINES) == ["shorter", "easier", "harder", "story", "chill", "different"]
-    assert list(REFINES.values()) == ["Покороче", "Попроще", "Посложнее", "Сюжетнее", "Спокойнее", "Совсем другое"]
-    assert LOOSEN == {"noavoid": "Снять исключения", "anylen": "Любая длина"}
+    from gamefinder.intent import loosen_label, refine_label
+    assert [refine_label(k) for k in REFINES] == ["Покороче", "Попроще", "Посложнее", "Сюжетнее", "Спокойнее",
+                                                  "Совсем другое"]
+    assert {k: loosen_label(k) for k in LOOSEN} == {"noavoid": "Снять исключения", "anylen": "Любая длина"}
+    with i18n.using("en"):
+        assert [refine_label(k) for k in REFINES] == ["Shorter", "Easier", "Harder", "More story", "Calmer",
+                                                      "Something else"]
 
 
 def test_refine_loosen():

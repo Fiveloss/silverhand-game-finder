@@ -122,9 +122,11 @@ def for_request(req, seeds: list[dict], avoid: list[dict], passports: dict[int, 
 
 
 def describe_axis(axis: str, value: float) -> str:
-    low, high = AXES[axis]
+    from .analyst import axis_ends
+    from .i18n import tr
+    low, high = axis_ends(axis)
     if value <= 3.5:
         return low
     if value >= 6.5:
         return high
-    return f"в меру ({low} ↔ {high})"
+    return tr(f"in between ({low} ↔ {high})", f"в меру ({low} ↔ {high})")

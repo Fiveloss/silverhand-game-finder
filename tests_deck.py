@@ -9,6 +9,8 @@ import logging
 import aiohttp
 
 from gamefinder.http import HttpError
+from gamefinder import i18n  # noqa: E402
+i18n.set_lang("ru")     # these tests check the Russian texts; English has tests of its own
 from gamefinder.sources.deck import (DECK_URL, PROTON_URL, deck_fields, deck_label, deck_notes,
                                      deck_status, proton_summary)
 

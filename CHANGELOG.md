@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.0 — 2026-10-08
+
+English first.
+
+- The first `/start` asks for the language, English first; `/lang` and **🌐 Language** on the
+  home screen change it. Every button, panel, card, caption and game breakdown comes in it,
+  and so do the AI judge's reasons and risks and the scout's "why".
+- Game passports are still read once for everyone; for English players their text is
+  translated by a free model once per passport version and kept (`passport_tr`). Heuristic
+  passports map their fixed phrases without a model.
+- Free-text answers in English are understood too ("the atmosphere and exploration, but the
+  combat was annoying", "everything", "not really").
+- The bot sets its own description, about text and command menu in each language
+  (`gamefinder/profile.py`), English by default.
+- Menu animations per language (`assets/menu/<lang>/`), and English README cards, banner,
+  BotFather picture and promo.
+
 ## 0.4.0 — 2026-10-08
 
 Genre and format first: picks a player can just play in order.
@@ -14,7 +31,7 @@ Genre and format first: picks a player can just play in order.
   one game of its series at most, always last. One game per series in any selection.
 - Every card says why the game is there: the shared genre, the same format, how close the
   player tags are, who proposed it (the scout, players of the reference, the judge).
-- Player slang for titles («резик», «фолыч», «сабнатика»…), in the lookup and the model's
+- Player slang and short names for titles ("RE" for Resident Evil, "BG3"…), in the lookup and the model's
   reading of the request.
 - Reviews of the whole catalog: the background reads them on Gemini Flash Lite only (Groq's
   small daily quota stays for the calls a player waits for). Flash Lite's free tier is about
@@ -30,9 +47,9 @@ Genre and format first: picks a player can just play in order.
   one); the bot shows the best rated, 6 and up, in order. It sees the reference's main genres,
   format and strengths, and may use what it surely knows about well-known games not read yet.
   Fewer, but sure: no near-miss filler after the judge ran, and the panel says so.
-- Up to two more sure picks are kept back: «✅ Уже играл» or «👎 Не то» on a card brings the
+- Up to two more sure picks are kept back: "✅ Played it" or "👎 Not this" on a card brings the
   next one at once, with no new search.
-- «🤔 Не та игра» under «Чем зацепила X?»: when the reference was found as another game, the
+- "🤔 Wrong game" under "What exactly hooked you in X?": when the reference was found as another game, the
   bot asks for the exact title.
 - `tools/golden.json` and `eval_picks.py --golden`: 30 requests with games that fit and games
   that must never come up.
@@ -62,18 +79,18 @@ a day) was used up; checked on 12 real requests, it now takes about 20–30 s.
 Help in the moment, with one panel instead of a stream of messages.
 
 - One panel message per player, edited in place: the home screen, the questions, the
-  search progress and «Подкрутить?» live in it, and it moves under the newest cards.
+  search progress and "Fine-tune?" live in it, and it moves under the newest cards.
   The player's own messages are deleted once read. The persistent reply keyboard is gone.
-- Questions before a search, each skippable with «⚡ Подобрать сейчас»: «Чем именно
-  зацепила X?» (when a game is named), «Что точно не надо?» (toggle exclusions, the ones
-  already in the request ticked) and «Сколько есть времени?» (skipped when the request
+- Questions before a search, each skippable with "⚡ Pick now": "What exactly hooked
+  you in X?" (when a game is named), "Anything to avoid?" (toggle exclusions, the ones
+  already in the request ticked) and "How much time do you have?" (skipped when the request
   says). Mood buttons search at once.
 - Written corrections: anything typed while the questions or the results are on screen
-  is merged into the current request («без хоррора, покороче»); a new reference game
+  is merged into the current request ("no horror, shorter"); a new reference game
   starts a new search. Typing during a search is applied right after it.
-- Refine buttons renamed («Покороче», «Попроще», «Посложнее», «Сюжетнее», «Спокойнее»,
-  «Совсем другое», «🔄 Ещё 3»). When nothing fits, «Снять исключения», «Любая длина» and
-  «Совсем другое» loosen the request.
+- Refine buttons renamed ("Shorter", "Easier", "Harder", "More story", "Calmer",
+  "Something else", "🔄 Three more"). When nothing fits, "Drop the exclusions", "Any length" and
+  "Something else" loosen the request.
 - Prices from the player's own Steam region: asked once before the first search
   (changeable from the home screen), fetched from the Steam store for each selection
   and cached for an hour; a game not sold in the region says so. `STORE_CC` now only
@@ -117,14 +134,14 @@ Help in the moment, with one panel instead of a stream of messages.
 The bot now helps pick a game for right now instead of learning a player's taste.
 
 - No onboarding and no stored profile. The player writes what they want in their own
-  words («как Hollow Knight, но проще, на пару вечеров», «кооп с другом, не шутер») or
+  words ("like Hollow Knight, but easier, for a couple of evenings", "co-op with a friend, not a shooter") or
   taps a mood button (like a game, for an evening, something long, with a friend, chill,
   challenge, story, hidden gems, surprise me). One free-LLM call reads the message into
   a request: reference games and games to avoid, mood, feel targets, hours, co-op,
   dealbreakers, tags to pull towards or push away from, and the experience in the
   player's words; keyword rules read it when no model can, and always add dealbreakers
   and co-op they find.
-- «Чем именно зацепила <игра>?»: when a reference game is named, the bot offers up to six
+- "What exactly hooked you in <game>?": when a reference game is named, the bot offers up to six
   options specific to that game (from what its reviewers praise, its strongest feel axes
   and player tags, or from the LLM card), as toggle buttons or a free-text answer. The
   picked aspects steer the request; the reference's other traits barely count, and what
@@ -133,16 +150,16 @@ The bot now helps pick a game for right now instead of learning a player's taste
   with the request, review freshness, feel bars, real genres, length, price and Steam
   Deck status; the caption gives the reason, a real player's quote and warnings. A game
   breakdown is a larger card with all 12 axes, praise and complaints.
-- Refining in the moment: «Короче», «Проще», «Сложнее», «Больше сюжета», «Спокойнее»,
-  «Совсем другое», «Ещё 3». What the request asks for outright is a filter; when exact
+- Refining in the moment: "Shorter", "Easier", "Harder", "More story", "Calmer",
+  "Something else", "Three more". What the request asks for outright is a filter; when exact
   matches run short, the closest games are added and marked as a compromise.
-  «Уже играл» and «Не то» only drop a game from the current selection.
+  "Played it" and "Not this" only drop a game from the current selection.
 - Nothing about the player is remembered between requests: only the current request and
   the games shown for it are kept, and the next request replaces them. Removed: the
   questionnaire, the taste profile, learning from ratings, the two-week rest for shown
   games, the Steam library import, and the `/profile`, `/add`, `/steam` and `/reset`
-  commands. New: `/game` for a breakdown. The menu is «🎮 Подобрать», «🔎 Разбор игры»,
-  «❔ Как это работает».
+  commands. New: `/game` for a breakdown. The menu is "🎮 Find", "🔎 Game breakdown",
+  "❔ How it works".
 - Reference titles are matched strictly (Alan Wake 2 never becomes Alan Wake). Games
   that are not on Steam (Epic or console exclusives, old games) work as references
   through IGDB (`IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET`, a free Twitch app) or a card from

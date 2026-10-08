@@ -9,6 +9,8 @@ import traceback
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from gamefinder import aspects as A  # noqa: E402
+from gamefinder import i18n  # noqa: E402
+i18n.set_lang("ru")     # these tests check the Russian texts; English has tests of its own
 from gamefinder.analyst import AXES, normalize  # noqa: E402
 from gamefinder.intent import Request  # noqa: E402
 

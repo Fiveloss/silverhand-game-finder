@@ -52,10 +52,10 @@ loop) differs from the loved games' "main_genres" and "format" is a mismatch, ho
 - fit: integer 0-10. 9-10: a fan of the reference will surely love it; 7-8: very likely; 5-6: a fair \
 bet with doubts; 0-4: a mismatch. Rate each on its own, do not ration high marks: several \
 candidates can deserve 8+.
-- reason: 1-2 sentences in Russian, concrete: what reviewers say about the game that matches what \
-the player loves (name the loved game or the axis when it helps). No marketing words, no "идеально". \
+- reason: 1-2 sentences in {lang}, concrete: what reviewers say about the game that matches what \
+the player loves (name the loved game or the axis when it helps). No marketing words, no "perfect" / "идеально". \
 For a mismatch (fit below 5) a few words why are enough.
-- risk: one short sentence in Russian about what may not suit this player (a complaint that goes \
+- risk: one short sentence in {lang} about what may not suit this player (a complaint that goes \
 against their taste, a quality problem, a dealbreaker-adjacent trait), or "" if nothing stands out.
 - Complaints marked "taste" with an axis are about a trait: "too slow" (pace low) is a plus for a \
 player who likes slow games. Complaints marked "quality" are always minuses.
@@ -217,7 +217,7 @@ def parse_picks(data, ids: dict[str, object], k: int) -> list[dict]:
             continue
         seen.add(key)
         risk = clean(item.get("risk"), RISK_CHARS)
-        if risk.lower() in ("none", "null", "нет", "-", "—"):
+        if risk.lower() in ("none", "null", "нет", "no", "n/a", "-", "—"):
             risk = ""
         try:
             fit = max(0, min(10, int(round(float(item.get("fit"))))))
@@ -285,7 +285,10 @@ async def rerank(analyst, profile: dict, candidates: list[dict], k: int = 3,
         sent = {json.loads(line)["id"] for line in prompt.splitlines() if line.startswith('{"id"')}
         ids = {clean(c.get("id"), 40): c.get("id") for c in cands if clean(c.get("id"), 40) in sent}
         k = min(k, len(ids))
-        system = SYSTEM.format(k=k, axes="; ".join(f"{a} {lo} ↔ {hi}" for a, (lo, hi) in AXES.items()))
+        from .analyst import axis_ends
+        from .i18n import prompt_lang
+        system = SYSTEM.format(k=k, lang=prompt_lang(),
+                               axes="; ".join(f"{a} {axis_ends(a)[0]} ↔ {axis_ends(a)[1]}" for a in AXES))
     except Exception as e:
         log.warning("rerank: bad input: %s", e)
         return None

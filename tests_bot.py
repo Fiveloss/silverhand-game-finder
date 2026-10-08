@@ -38,13 +38,17 @@ from aiogram.types import (Animation, BufferedInputFile, CallbackQuery, Chat, FS
                            InaccessibleMessage, InlineKeyboardMarkup, InputMediaAnimation, Message, MessageEntity,
                            PhotoSize, ReplyKeyboardMarkup, ReplyKeyboardRemove, Update, User)
 
-from gamefinder import aspects, bot as botmod, intent, render  # noqa: E402
+from gamefinder import aspects, bot as botmod, i18n, intent, render  # noqa: E402
 from gamefinder.analyst import AXES  # noqa: E402
 from gamefinder.bot import AVOID, MEDIA, QUICK, TIME, App, _split, build_router  # noqa: E402
 from gamefinder.config import Config  # noqa: E402
 from gamefinder.db import Db  # noqa: E402
 from gamefinder.intent import Request  # noqa: E402
 from gamefinder.recommender import Catalog, Pick  # noqa: E402
+
+# The scenarios below check the Russian interface (OWNER and FRIEND chose Russian); the English one,
+# the default, has scenarios of its own. Keyboards built outside a handler use this module's language.
+i18n.set_lang("ru")
 
 OWNER, FRIEND, STRANGER, BUDDY = 100, 200, 300, 555
 BOT_ID = 42
@@ -72,7 +76,7 @@ STALE = "Кнопка устарела, жми /start"
 OUTDATED = "Вопрос устарел"
 
 HOME = ["q:like", "q:evening", "q:long", "q:coop", "q:chill", "q:challenge", "q:story", "q:gems", "q:surprise",
-        "game", "help", "region"]
+        "game", "help", "region", "lang"]
 RESULTS = [f"rf:{k}" for k in intent.REFINES] + ["more", "home"]
 LOOSEN = ["rf:noavoid", "rf:anylen", "rf:different", "home"]          # under «Ничего не нашлось»
 AVOID_ORDER = ["horror", "shooter", "hard", "grind", "mtx", "text", "pvp", "noru", "early"]   # as on screen
@@ -328,6 +332,7 @@ class FakeService:
         self.hold: asyncio.Event | None = None
         self.resolved: list[tuple[str, bool]] = []
         self.analyzed: list[int] = []
+        self.localized: list[list[int]] = []
         self.asked: list[str] = []
         self.requests: list[tuple[int, Request, set[int]]] = []
         self.price_calls: list[tuple[tuple[int, ...], str]] = []
@@ -342,6 +347,14 @@ class FakeService:
 
     def passport_fresh(self, appid: int) -> bool:
         return self.db.passport(appid) is not None
+
+    async def localize(self, passports: dict[int, dict]) -> dict[int, dict]:
+        self.localized.append(sorted(passports))
+        return passports
+
+    async def localize_picks(self, picks: list[Pick]) -> list[Pick]:
+        self.localized.append(sorted(p.appid for p in picks))
+        return picks
 
     async def resolve(self, text: str, limit: int = 5, strict: bool = False, light: bool = False) -> list[dict]:
         self.resolved.append((text, strict))
@@ -410,9 +423,9 @@ class Harness:
                                 negative=1000, price_cents=1999, currency="USD", ru_text=1, store_ok=1, spy_ok=1)
         self.cfg = Config(bot_token="42:TEST", owner_ids=frozenset({OWNER}), allowed_ids=frozenset({FRIEND}),
                           animate_cards=False)
-        for uid in (OWNER, FRIEND):         # both told the bot their Steam region already
+        for uid in (OWNER, FRIEND):         # both told the bot their Steam region and language already
             self.db.user(uid)
-            self.db.update_user(uid, region="ru")
+            self.db.update_user(uid, region="ru", lang="ru")
         self.s = FakeService(self.cfg, self.db)
         self.tg = FakeTelegram()
         self.bot = Bot("42:TEST", session=self.tg, default=DefaultBotProperties(parse_mode="HTML"))
@@ -782,7 +795,11 @@ def test_panel_media_exist():
     screens = set(re.findall(r"panel\(\w+(?:\.from_user\.id)?, \"(\w+)\"", src))
     assert screens == {"start", "help", "game", "pick"}, screens
     for screen in screens:
-        assert (MEDIA / f"{screen}.mp4").is_file(), screen
+        assert (MEDIA / "en" / f"{screen}.mp4").is_file(), screen
+        # the other languages' animations are optional (the public copy ships English only)
+        for lang in ("ru",):
+            if (MEDIA / lang).is_dir():
+                assert (MEDIA / lang / f"{screen}.mp4").is_file(), (lang, screen)
 
 
 # --- scenarios: the panel
@@ -1117,7 +1134,7 @@ async def test_go_skips_the_remaining_questions(h):
     h.db.user(BUDDY)
     h.db.update_user(BUDDY, allowed=1)
     await h.press(BUDDY, "go", message=old_message(BUDDY))
-    assert h.answers()[-1] == "Начни заново" and len(h.s.requests) == 3
+    assert h.answers()[-1] == "Start over" and len(h.s.requests) == 3      # no language chosen yet: English
 
 
 @scenario
@@ -1438,7 +1455,7 @@ async def test_stranger_is_gated_and_owner_asked_once(h):
     assert h.buttons(OWNER) == [f"allow:{STRANGER}"]
     await h.send(STRANGER, "Hollow Knight")
     await h.press(STRANGER, "q:evening", message=old_message(STRANGER))
-    assert h.answers()[-1] == "Бот приватный"
+    assert h.answers()[-1] == "Private bot · Бот приватный"
     assert len(h.out(OWNER)) == 1                              # the owner is told once
     assert len(h.out(STRANGER)) == 2 and h.s.resolved == [] and h.parsed == [] and h.s.requests == []
     assert h.tg.sent("SendAnimation") == []                    # no panel for a stranger
@@ -1454,7 +1471,9 @@ async def test_stranger_is_gated_and_owner_asked_once(h):
     await h.press(OWNER, "noop")
     assert h.answers()[-1] is None and len(h.out(STRANGER)) == n and h.buttons(OWNER) == ["noop"]
     await h.send(STRANGER, "/start", first_name="Eve")
-    assert "Привет, Eve" in h.check_panel(STRANGER).caption and h.pbuttons(STRANGER) == HOME
+    assert "Choose your language" in h.check_panel(STRANGER).caption      # a newcomer: the language first
+    await h.press(STRANGER, "lang:en")
+    assert "What to play right now?" in h.check_panel(STRANGER).caption and h.pbuttons(STRANGER) == HOME
 
 
 @scenario
@@ -1465,6 +1484,9 @@ async def test_owner_allow_and_stats(h):
     assert BUDDY in h.db.allowed_users()
     assert "Тебя пустили" in h.last(BUDDY) and "Доступ открыт" in h.last(OWNER) and "id — <b>555</b>" in h.last(OWNER)
     await h.send(BUDDY, "/start")
+    # a newcomer chooses the language first, English first
+    assert "Choose your language" in h.check_panel(BUDDY).caption and h.pbuttons(BUDDY) == ["lang:en", "lang:ru"]
+    await h.press(BUDDY, "lang:ru")
     assert "Во что поиграть сейчас?" in h.check_panel(BUDDY).caption
 
     h.db.add_llm_usage(12_500, 3_400)

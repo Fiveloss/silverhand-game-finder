@@ -34,6 +34,29 @@ AXES = {
     "length": ("короткая", "очень длинная"),
     "replay": ("на один раз", "бесконечная реиграбельность"),
 }
+# The same ends in English, for English players (axis_ends picks by the current language).
+AXES_EN = {
+    "pace": ("slow", "fast"),
+    "difficulty": ("easy", "hardcore"),
+    "story": ("story barely matters", "story at the centre"),
+    "freedom": ("linear", "full freedom"),
+    "complexity": ("simple mechanics", "deep systems"),
+    "grind": ("no grind", "lots of grind"),
+    "tension": ("relaxing", "tense"),
+    "combat": ("hardly any combat", "combat is the core"),
+    "exploration": ("nothing to explore", "exploration is the core"),
+    "social": ("solo", "played with people"),
+    "length": ("short", "very long"),
+    "replay": ("play once", "endless replay"),
+}
+
+
+def axis_ends(axis: str) -> tuple[str, str]:
+    """(low end, high end) of an axis in the player's language."""
+    from .i18n import is_ru
+    return AXES[axis] if is_ru() else AXES_EN[axis]
+
+
 QUALITY_KEYS = ("bugs", "performance", "monetization", "abandoned", "ending", "ru_localization", "servers")
 SHARES = ("most", "many", "some")
 
@@ -503,6 +526,18 @@ PRAISE = [
     (r"co-?op|friends|кооп|с друзьями", "игра с друзьями"),
     (r"replay|реиграб", "реиграбельность"),
 ]
+# The heuristic passport's fixed Russian phrases in English (service.localize uses it without a model).
+HEURISTIC_EN = {ru: en for ru, en in (
+    ("баги", "bugs"), ("оптимизация", "performance"), ("вылеты", "crashes"),
+    ("донат и монетизация", "microtransactions"), ("разработка заброшена", "abandoned development"),
+    ("сервера и онлайн", "servers and always-online"), ("концовка", "the ending"), ("перевод", "the translation"),
+    ("слишком медленно и затянуто", "too slow and drawn out"), ("слишком сложно", "too hard"),
+    ("слишком легко", "too easy"), ("много гринда", "a lot of grind"), ("коротко", "short"),
+    ("слишком длинно", "too long"), ("много текста", "a lot of text"), ("однообразно", "repetitive"),
+    ("сюжет", "the story"), ("атмосфера", "the atmosphere"), ("музыка", "the music"), ("визуал", "the visuals"),
+    ("геймплей", "the gameplay"), ("исследование", "exploration"), ("боевая система", "the combat"),
+    ("персонажи", "the characters"), ("игра с друзьями", "playing with friends"),
+    ("реиграбельность", "replay value"))}
 
 
 def heuristic_passport(game: dict, stats: dict | None, sample: list[dict]) -> dict:

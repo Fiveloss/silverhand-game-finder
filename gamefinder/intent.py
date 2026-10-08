@@ -31,10 +31,22 @@ from .recommender import DEALBREAKERS, MOODS
 
 log = logging.getLogger(__name__)
 
-REFINES = {"shorter": "Покороче", "easier": "Попроще", "harder": "Посложнее", "story": "Сюжетнее",
-           "chill": "Спокойнее", "different": "Совсем другое"}
+# (English, Russian) button labels; refine_label / loosen_label pick the player's language.
+REFINES = {"shorter": ("Shorter", "Покороче"), "easier": ("Easier", "Попроще"), "harder": ("Harder", "Посложнее"),
+           "story": ("More story", "Сюжетнее"), "chill": ("Calmer", "Спокойнее"),
+           "different": ("Something else", "Совсем другое")}
 # When nothing was found: buttons that loosen the request.
-LOOSEN = {"noavoid": "Снять исключения", "anylen": "Любая длина"}
+LOOSEN = {"noavoid": ("Drop the exclusions", "Снять исключения"), "anylen": ("Any length", "Любая длина")}
+
+
+def refine_label(key: str) -> str:
+    from .i18n import pick
+    return pick(REFINES[key])
+
+
+def loosen_label(key: str) -> str:
+    from .i18n import pick
+    return pick(LOOSEN[key])
 
 MAX_TITLES = 6
 MAX_TAGS = 10
@@ -797,20 +809,20 @@ def coerce(d) -> Request:
 # --- the LLM parser
 
 SYSTEM = """You turn a player's message to a video game recommendation bot into a search request. \
-The player writes, usually in Russian, what they want to play RIGHT NOW. Read it and fill the fields.
+The player writes, in Russian or English, what they want to play RIGHT NOW. Read it and fill the fields.
 
 Fields:
 - seeds: titles of games the player wants something LIKE ("как X", "типа X", "похоже на X", "вроде X", \
-"как X и Y", "like X"). Only titles that are in the message; write the official title when you are sure \
+"как X и Y", "like X", "something like X", "similar to X"). Only titles that are in the message; write the official title when you are sure \
 ("римворлд" -> "RimWorld"); expand player slang and abbreviations to the official title \
 ("резик" -> "Resident Evil", "фолыч" -> "Fallout", "бг3" -> "Baldur's Gate 3"), otherwise as written. [] if none.
-- avoid: titles the player wants to stay away from ("не как Dark Souls", "только не Fortnite"). [] if none.
+- avoid: titles the player wants to stay away from ("не как Dark Souls", "только не Fortnite", "not like X"). [] if none.
 - mood: exactly one of: {moods}. "any" when nothing fits. coop when they play with someone.
 - axes: ONLY the axes the message implies, integers 0-10, others omitted. Axes (0 = first, 10 = second): \
-{axes}. "попроще"/"полегче" -> difficulty 3 (or 2-3 below a named seed's level); "посложнее" -> 8; \
+{axes}. "попроще"/"полегче"/"easier" -> difficulty 3 (or 2-3 below a named seed's level); "посложнее" -> 8; \
 "на вечер"/"короткая" -> length 1-2; "залипнуть надолго" -> length 8, replay 8; "спокойное" -> tension 2.
 - max_hours / min_hours: integers or null. "на вечер" ~ 4, "на пару вечеров" ~ 10, "на выходные" ~ 15, \
-"на неделю" ~ 25, "до 20 часов" -> 20. "надолго" is NOT min_hours: use length/replay. null when not said.
+"на неделю" ~ 25, "до 20 часов" -> 20; "for an evening" ~ 4, "a couple of evenings" ~ 10, "a weekend" ~ 15. "надолго" is NOT min_hours: use length/replay. null when not said.
 - coop: true only when they want to play together with other people.
 - dealbreakers: only when stated or clearly implied, only these keys: {dealbreakers}. \
 "без доната" -> mtx, "не хоррор" -> horror, "на стимдек" -> no_deck, "на русском" -> no_ru, \
@@ -818,7 +830,7 @@ Fields:
 - tags_want / tags_avoid: Steam user tags the message implies, at most 6 each, ONLY from this list, spelled \
 exactly: {tags}. "не шутер" -> tags_avoid ["Shooter", "FPS"]. Do not add tags of the seed games: only what \
 the message itself asks for.
-- words: up to 200 characters in Russian: the experience they want in their own words, without titles and \
+- words: up to 200 characters in the player's language: the experience they want in their own words, without titles and \
 without constraints (hours, language, price, platform), e.g. "грустная трогательная история". "" when \
 the message has nothing beyond titles and constraints.
 - surprise: true when they ask to be surprised or say anything goes.
@@ -1068,43 +1080,68 @@ def refine(req: Request, how: str, shown: list[dict]) -> Request:
 
 # --- the banner
 
+# (English, Russian) for the banner line; _w picks the player's language.
 AXIS_WORDS = {
-    "pace": ("неспешно", "динамично"), "difficulty": ("проще", "сложнее"), "story": ("без упора на сюжет", "сюжет"),
-    "freedom": ("линейно", "свобода"), "complexity": ("простые механики", "глубокие системы"),
-    "grind": ("без гринда", "гринд"), "tension": ("спокойно", "напряжённо"), "combat": ("без боёв", "бои"),
-    "exploration": ("без исследования", "исследование"), "social": ("в одиночку", "с людьми"),
-    "length": ("коротко", "надолго"), "replay": ("на один раз", "реиграбельно"),
+    "pace": (("slow-paced", "fast-paced"), ("неспешно", "динамично")),
+    "difficulty": (("easier", "harder"), ("проще", "сложнее")),
+    "story": (("story not the point", "story"), ("без упора на сюжет", "сюжет")),
+    "freedom": (("linear", "freedom"), ("линейно", "свобода")),
+    "complexity": (("simple mechanics", "deep systems"), ("простые механики", "глубокие системы")),
+    "grind": (("no grind", "grind"), ("без гринда", "гринд")),
+    "tension": (("calm", "tense"), ("спокойно", "напряжённо")),
+    "combat": (("no combat", "combat"), ("без боёв", "бои")),
+    "exploration": (("no exploring", "exploration"), ("без исследования", "исследование")),
+    "social": (("solo", "with people"), ("в одиночку", "с людьми")),
+    "length": (("short", "long"), ("коротко", "надолго")),
+    "replay": (("play once", "replayable"), ("на один раз", "реиграбельно")),
 }
-MOOD_WORDS = {"evening": "на вечер", "story": "сюжет", "chill": "спокойно", "challenge": "челлендж",
-              "coop": "с друзьями", "gems": "скрытые жемчужины", "fresh": "новинки"}
-DEALBREAKER_WORDS = {"mtx": "без доната", "online_only": "офлайн", "early_access": "без раннего доступа",
-                     "no_ru": "на русском", "no_ru_audio": "русская озвучка", "denuvo": "без Denuvo",
-                     "horror": "без хорроров", "adult": "без 18+", "no_deck": "для Steam Deck"}
+MOOD_WORDS = {"evening": ("for an evening", "на вечер"), "story": ("story", "сюжет"), "chill": ("calm", "спокойно"),
+              "challenge": ("a challenge", "челлендж"), "coop": ("with friends", "с друзьями"),
+              "gems": ("hidden gems", "скрытые жемчужины"), "fresh": ("new releases", "новинки")}
+DEALBREAKER_WORDS = {"mtx": ("no microtransactions", "без доната"), "online_only": ("offline", "офлайн"),
+                     "early_access": ("no early access", "без раннего доступа"),
+                     "no_ru": ("in Russian", "на русском"), "no_ru_audio": ("Russian voice-over", "русская озвучка"),
+                     "denuvo": ("no Denuvo", "без Denuvo"), "horror": ("no horror", "без хорроров"),
+                     "adult": ("no 18+", "без 18+"), "no_deck": ("for Steam Deck", "для Steam Deck")}
+
+
+def _w(pair) -> str:
+    from .i18n import pick
+    return pick(pair)
+
+
+def tag_word(tag: str) -> str:
+    """A Steam tag for the banner: the Russian word for Russian players, the tag itself in English."""
+    from .i18n import is_ru
+    return TAG_RU.get(tag, "") if is_ru() else (tag.lower() if tag in TAG_RU else "")
 
 
 def hours_label(max_hours: int | None, min_hours: int | None) -> str:
+    from .i18n import tr
     if max_hours:
         if max_hours < 4:
-            return f"до {max_hours} ч"
+            return tr(f"under {max_hours} h", f"до {max_hours} ч")
         if max_hours <= 4:
-            return "на вечер"
+            return tr("for an evening", "на вечер")
         if max_hours <= 10:
-            return "на пару вечеров"
+            return tr("for a couple of evenings", "на пару вечеров")
         if max_hours <= 16:
-            return "на выходные"
-        return f"до {max_hours} ч"
-    return f"от {min_hours} ч" if min_hours else ""
+            return tr("for a weekend", "на выходные")
+        return tr(f"under {max_hours} h", f"до {max_hours} ч")
+    return tr(f"{min_hours}+ h", f"от {min_hours} ч") if min_hours else ""
 
 
 def _titles_label(prefix: str, titles: list[str]) -> str:
+    from .i18n import tr
     if len(titles) == 1:
         return f"{prefix} {titles[0]}"
     if len(titles) == 2:
-        return f"{prefix} {titles[0]} и {titles[1]}"
-    return f"{prefix} {titles[0]}, {titles[1]} и ещё {len(titles) - 2}"
+        return f"{prefix} {titles[0]} {tr('and', 'и')} {titles[1]}"
+    return f"{prefix} {titles[0]}, {titles[1]} " + tr(f"and {len(titles) - 2} more", f"и ещё {len(titles) - 2}")
 
 
 def _label(r: Request) -> str:
+    from .i18n import tr
     parts: list[str] = []
 
     def add(s: str):
@@ -1112,21 +1149,22 @@ def _label(r: Request) -> str:
             parts.append(s)
 
     if r.diversify:
-        add("совсем другое")
+        add(tr("something else", "совсем другое"))
     elif r.seeds:
-        add(_titles_label("как", r.seeds))
+        add(_titles_label(tr("like", "как"), r.seeds))
         if r.focus_labels:
             add(", ".join(x.lower() for x in r.focus_labels[:3]))
     if r.avoid:
-        add(_titles_label("не как", r.avoid))
+        add(_titles_label(tr("not like", "не как"), r.avoid))
     focus = " ".join(x.lower() for x in r.focus_labels)
     for t in ([] if r.focus_labels else r.tags_want[:2]):     # what they picked already says it
-        word = TAG_RU.get(t, "")
+        word = tag_word(t)
         if t not in COOP_TAGS and word and word not in focus:
             add(word)
     hours = hours_label(r.max_hours, r.min_hours)
     n = 0
-    for k, (lo, hi) in AXIS_WORDS.items():
+    for k, pair in AXIS_WORDS.items():
+        lo, hi = pair[1] if _is_ru() else pair[0]
         v = r.axes.get(k)
         if v is None or (k == "length" and hours) or (k == "social" and r.coop) or n >= 3:
             continue
@@ -1135,20 +1173,27 @@ def _label(r: Request) -> str:
             add(word)
             n += 1
     if r.coop:
-        add("с друзьями")
+        add(tr("with friends", "с друзьями"))
     if r.mood != "any" and not (r.mood == "evening" and hours):
-        add(MOOD_WORDS.get(r.mood, ""))
+        add(_w(MOOD_WORDS[r.mood]) if r.mood in MOOD_WORDS else "")
     add(hours)
+    no_horror = tr("not horror", "не хоррор")
     for t in r.tags_avoid[:1]:
-        if t in TAG_RU:
-            add("не " + TAG_RU[t])
+        word = tag_word(t)
+        if word:
+            add(tr("not ", "не ") + word)
     for k in r.dealbreakers[:2]:
-        if not (k == "horror" and "не хоррор" in parts):
-            add(DEALBREAKER_WORDS.get(k, ""))
+        if not (k == "horror" and no_horror in parts):
+            add(_w(DEALBREAKER_WORDS[k]) if k in DEALBREAKER_WORDS else "")
     if not parts:
-        return "удиви меня" if r.surprise else "что угодно"
+        return tr("surprise me", "удиви меня") if r.surprise else tr("anything", "что угодно")
     out = " · ".join(parts[:5])
     return out if len(out) <= 140 else out[:139].rstrip(" ·") + "…"
+
+
+def _is_ru() -> bool:
+    from .i18n import is_ru
+    return is_ru()
 
 
 __all__ = ["Request", "parse", "parse_heuristic", "refine", "coerce", "REFINES", "VOCAB", "ALLOWED_TAGS",

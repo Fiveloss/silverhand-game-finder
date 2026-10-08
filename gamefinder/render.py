@@ -1011,9 +1011,10 @@ def genre_chips(d, x, y, w, genres, font, h=46, gap=10, max_rows=1):
 
 
 def judge_tag(img, x, y, right=False):
-    """'ВЫБОР ИИ' in hologram cyan. x is the left edge, or the right with right=True."""
+    """'AI PICK' ('ВЫБОР ИИ') in hologram cyan. x is the left edge, or the right with right=True."""
+    from .i18n import tr
     f = mono(26, 700)
-    s = "ВЫБОР ИИ"
+    s = tr("AI PICK", "ВЫБОР ИИ")
     w = int(tlen(f, s, 2)) + 56
     if right:
         x -= w
@@ -1056,10 +1057,15 @@ def confidence_badge(img, x, y, view, right=True):
             n = max(0, int(view.get("reviews_used") or 0))
         except (TypeError, ValueError):
             n = 0
-        s = f"РАЗБОР ПО {n} {plural(n, 'ОТЗЫВУ', 'ОТЗЫВАМ', 'ОТЗЫВАМ')}" if n else "РАЗБОР ПО ОТЗЫВАМ"
+        from .i18n import is_ru
+        if is_ru():
+            s = f"РАЗБОР ПО {n} {plural(n, 'ОТЗЫВУ', 'ОТЗЫВАМ', 'ОТЗЫВАМ')}" if n else "РАЗБОР ПО ОТЗЫВАМ"
+        else:
+            s = f"READ FROM {n} {'REVIEW' if n == 1 else 'REVIEWS'}" if n else "READ FROM REVIEWS"
         col, plate_c, ink = GOOD, (6, 20, 9), (206, 240, 208)
     elif kind == "tags":
-        s = "ОЦЕНКА ПО ТЕГАМ"
+        from .i18n import tr
+        s = tr("ESTIMATE FROM TAGS", "ОЦЕНКА ПО ТЕГАМ")
         col, plate_c, ink = mix(ACC, CHROME, .5), (24, 18, 12), (226, 212, 192)
     else:
         return 0
@@ -1125,16 +1131,19 @@ def title_block(img, x, top, bottom, w, s, max_lines, sizes, valign="middle", gl
 def stat_block(img, x, cy, w, view, big=60, small=30, compact=False):
     """Next to the ring: what the ring shows, then the share of fresh reviews that praise
     the game with its coloured dot, then the number of reviews. cy is the ring's center."""
+    from .i18n import is_ru, tr
     d = ImageDraw.Draw(img)
     m = _match(view)
     if compact:
         # one caption line instead of two, so the block is no taller than a small ring
-        eyebrow(d, x, cy - 30, clip("СОВПАДЕНИЕ С ЗАПРОСОМ" if m is not None else "СВЕЖИЕ ОТЗЫВЫ",
+        eyebrow(d, x, cy - 30, clip(tr("MATCH WITH YOUR REQUEST", "СОВПАДЕНИЕ С ЗАПРОСОМ") if m is not None
+                                    else tr("RECENT REVIEWS", "СВЕЖИЕ ОТЗЫВЫ"),
                                     mono(22, 600), w, 3), size=22, color=mix(ACC, BG, .92))
         div = cy - 16
     else:
-        eyebrow(d, x, cy - 40, "СОВПАДЕНИЕ" if m is not None else "СВЕЖИЕ ОТЗЫВЫ", color=mix(ACC, BG, .92))
-        sub = "с запросом" if m is not None else "положительные"
+        eyebrow(d, x, cy - 40, tr("MATCH", "СОВПАДЕНИЕ") if m is not None else tr("RECENT REVIEWS", "СВЕЖИЕ ОТЗЫВЫ"),
+                color=mix(ACC, BG, .92))
+        sub = tr("with your request", "с запросом") if m is not None else tr("positive", "положительные")
         text(d, (x, cy - 4), sub, sofia(small, 500), DIM)
         div = cy + 14
     d.line((x, div, x + w, div), fill=mix(ACC, BG, .28), width=1)
@@ -1147,15 +1156,17 @@ def stat_block(img, x, cy, w, view, big=60, small=30, compact=False):
             dot(img, x + 11, int(base - big * .33), 11, col)
             d = ImageDraw.Draw(img)
             end = text(d, (x + 32, base), f"{pct}%", fb, INK)
-            text(d, (end + 12, base), _clip("stats", "свежих хвалят", fs, x + w - end - 12), fs, DIM)
+            text(d, (end + 12, base), _clip("stats", tr("recent positive", "свежих хвалят"), fs, x + w - end - 12),
+                 fs, DIM)
         else:
             base = div + small * 1.3
-            text(d, (x, base), "свежих отзывов мало", fs, UNLIT)
+            text(d, (x, base), tr("few recent reviews", "свежих отзывов мало"), fs, UNLIT)
     else:
         base = div + 4
     total = view.get("reviews_total") or 0
     if total:
-        t = f"{thousands(total)} {plural(total, 'отзыв', 'отзыва', 'отзывов')} всего"
+        t = (f"{thousands(total)} {plural(total, 'отзыв', 'отзыва', 'отзывов')} всего" if is_ru()
+             else f"{total:,} {'review' if total == 1 else 'reviews'} in total")
         f = sofia(small - 2, 500)
         text(d, (x, base + small + 6), _clip("stats", t, f, w), f, UNLIT)
 
@@ -1164,7 +1175,7 @@ def pick_card(view: dict, cover: bytes | None) -> bytes:
     """One recommendation of a selection, 1280x720 JPEG."""
     LAST_CLIPPED.clear()
     W, H, M = 1280, 720, 44
-    name = str(view.get("name") or "Без названия")
+    name = str(view.get("name") or "—")
     cov = _open_cover(cover)
     img = backdrop(W, H, cov, seed=name, glow_at=(.27, .32))
     tapes(img)
@@ -1222,7 +1233,7 @@ def pick_card(view: dict, cover: bytes | None) -> bytes:
     return _out(img)
 
 
-SHARE_LEVELS = (("большинств", 3), ("почти все", 3), ("most", 3), ("многие", 2), ("many", 2),
+SHARE_LEVELS = (("большинств", 3), ("почти все", 3), ("almost everyone", 3), ("most", 3), ("многие", 2), ("many", 2),
                 ("часть", 1), ("некоторые", 1), ("немногие", 1), ("some", 1), ("few", 1))
 
 
@@ -1288,7 +1299,7 @@ def game_card(view: dict, cover: bytes | None) -> bytes:
     with the real fonts, then the canvas is made and drawn."""
     LAST_CLIPPED.clear()
     W, M = 1280, 44
-    name = str(view.get("name") or "Без названия")
+    name = str(view.get("name") or "—")
     cov = _open_cover(cover)
     cx0, cy0, cw, ch = M, 48, 544, 312
     full = W - 2 * M
@@ -1425,7 +1436,7 @@ def game_card(view: dict, cover: bytes | None) -> bytes:
 
     # feel: twelve axes in two columns
     if feel:
-        eyebrow(d, M, y + 22, "ОЩУЩЕНИЯ ПО ОТЗЫВАМ")
+        eyebrow(d, M, y + 22, _tr("HOW IT FEELS, BY THE REVIEWS", "ОЩУЩЕНИЯ ПО ОТЗЫВАМ"))
         d.line((M + 400, y + 13, W - M, y + 13), fill=mix(ACC, BG, .3), width=1)
         y += 44
         lf, wf = mono(20, 600), sofia(28, 600)
@@ -1439,17 +1450,19 @@ def game_card(view: dict, cover: bytes | None) -> bytes:
     if praise or complaints:
         y += 18
         taste_any = any(taste for _, _, taste in cols[1])
-        for col, (head, items, kind) in enumerate((("ХВАЛЯТ", cols[0], "plus"), ("РУГАЮТ", cols[1], "minus"))):
+        heads = (_tr("PRAISED", "ХВАЛЯТ"), _tr("CRITICISED", "РУГАЮТ"))
+        for col, (head, items, kind) in enumerate(((heads[0], cols[0], "plus"), (heads[1], cols[1], "minus"))):
             x = M + col * (col_w + 56)
             eyebrow(d, x, y + 22, head, color=GOOD if kind == "plus" else mix(BAD, INK, .85))
             if kind == "minus" and taste_any:
                 fl = mono(20, 600)
-                lx = x + col_w - tlen(fl, "ДЕЛО ВКУСА", 1.5)
-                text(d, (lx, y + 21), "ДЕЛО ВКУСА", fl, CYAN, tracking=1.5)
+                taste_word = _tr("A MATTER OF TASTE", "ДЕЛО ВКУСА")
+                lx = x + col_w - tlen(fl, taste_word, 1.5)
+                text(d, (lx, y + 21), taste_word, fl, CYAN, tracking=1.5)
                 d.rectangle((lx - 22, y + 6, lx - 10, y + 18), fill=CYAN)
             yy = y + 40
             if not items:
-                text(d, (x, yy + 30), "ничего заметного", pf, UNLIT)
+                text(d, (x, yy + 30), _tr("nothing notable", "ничего заметного"), pf, UNLIT)
                 continue
             for lines, share, taste in items:
                 color = GOOD if kind == "plus" else (CYAN if taste else BAD)
@@ -1560,3 +1573,8 @@ def _fan_card(img, art, w, h, cx, cy, angle, front, name=""):
     if front:
         brackets(ImageDraw.Draw(img), x + b, y + b, x + rot.width - b, y + rot.height - b,
                  length=22, width=3, color=HI, gap=10)
+
+
+def _tr(en: str, ru: str) -> str:
+    from .i18n import tr
+    return tr(en, ru)

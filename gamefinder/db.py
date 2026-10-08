@@ -85,8 +85,16 @@ CREATE TABLE IF NOT EXISTS users (
     own_words TEXT NOT NULL DEFAULT '',     -- what hooks them in games, in their words
     session TEXT NOT NULL DEFAULT '{}',     -- the current request and the games shown for it
     region TEXT NOT NULL DEFAULT '',        -- their Steam account's store region, for prices
+    lang TEXT NOT NULL DEFAULT '',          -- en | ru; '' = not chosen yet (the first /start asks)
     allowed INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS passport_tr (
+    appid INTEGER NOT NULL,
+    lang TEXT NOT NULL,
+    data TEXT NOT NULL,                     -- the passport's text fields in that language
+    src_updated_at INTEGER NOT NULL,        -- the passport version it was translated from
+    PRIMARY KEY (appid, lang)
 );
 CREATE TABLE IF NOT EXISTS user_games (
     user_id INTEGER NOT NULL,
@@ -135,7 +143,8 @@ class Db:
         for table, columns in (("games", ADDED_COLUMNS), ("shown", [("parts", "TEXT NOT NULL DEFAULT '{}'")]),
                                ("users", [("own_words", "TEXT NOT NULL DEFAULT ''"),
                                          ("session", "TEXT NOT NULL DEFAULT '{}'"),
-                                         ("region", "TEXT NOT NULL DEFAULT ''")])):
+                                         ("region", "TEXT NOT NULL DEFAULT ''"),
+                                         ("lang", "TEXT NOT NULL DEFAULT ''")])):
             have = {r[1] for r in self.conn.execute(f"PRAGMA table_info({table})")}
             for name, ddl in columns:
                 if name not in have:
@@ -265,6 +274,22 @@ class Db:
             for row in self.conn.execute(f"SELECT * FROM passports WHERE appid IN ({marks})", chunk):
                 out[row["appid"]] = _passport(row)
         return out
+
+    def passport_tr(self, appid: int, lang: str, src_updated_at: int) -> dict | None:
+        """The passport's text in another language, if it was translated from this very version."""
+        row = self.conn.execute("SELECT data, src_updated_at FROM passport_tr WHERE appid=? AND lang=?",
+                                (appid, lang)).fetchone()
+        if not row or row[1] != src_updated_at:
+            return None
+        try:
+            return json.loads(row[0])
+        except ValueError:
+            return None
+
+    def set_passport_tr(self, appid: int, lang: str, src_updated_at: int, data: dict) -> None:
+        self.conn.execute("INSERT OR REPLACE INTO passport_tr(appid, lang, data, src_updated_at) VALUES(?, ?, ?, ?)",
+                          (appid, lang, json.dumps(data, ensure_ascii=False), src_updated_at))
+        self.conn.commit()
 
     def enqueue_analysis(self, appids, priority: int = 0) -> None:
         now = int(time.time())
