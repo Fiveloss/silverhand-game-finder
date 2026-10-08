@@ -1,0 +1,42 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Install requirements
+        run: pip install -r requirements.txt
+      - name: Offline checks (no network, no API keys)
+        run: python tests.py
+      - name: Reddit source against canned responses
+        run: python tests_reddit.py
+      - name: Telegram layer against a fake Bot API
+        run: |
+          if [ -f tests_bot.py ]; then
+            python tests_bot.py
+          else
+            echo "tests_bot.py not present, skipped"
+          fi
+      - name: Other test files (tests_*.py)
+        run: |
+          for t in tests_*.py; do
+            case "$t" in tests_reddit.py|tests_bot.py) continue ;; esac
+            echo "== $t"
+            python "$t"
+          done

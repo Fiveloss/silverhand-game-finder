@@ -1,0 +1,60 @@
+# systemd unit. install.sh copies it to /etc/systemd/system/gamefinder.service with the
+# real directory filled in. The limits keep the bot from ever starving other services
+# on the same server: if it goes over, it is throttled first, then killed and restarted.
+[Unit]
+Description=Silverhand Game Finder bot
+After=network-online.target
+Wants=network-online.target
+# A broken config or token must not restart forever: at most 10 starts in 15 minutes.
+StartLimitIntervalSec=900
+StartLimitBurst=10
+
+[Service]
+Type=simple
+WorkingDirectory=__DIR__
+ExecStart=__DIR__/venv/bin/python -m gamefinder.main
+Restart=always
+RestartSec=15
+RestartSteps=6
+RestartMaxDelaySec=10min
+# Exit code 78: bad configuration (main.py). Restarting would not help.
+RestartPreventExitStatus=78
+TimeoutStopSec=15
+MemoryHigh=250M
+MemoryMax=300M
+MemorySwapMax=0
+# A card encoder (ffmpeg) killed for memory must not take the bot down with it.
+OOMPolicy=continue
+# In a server-wide memory shortage this bot goes before the other services on the server.
+OOMScoreAdjust=300
+CPUQuota=30%
+CPUWeight=20
+IOWeight=20
+TasksMax=64
+Nice=10
+# One malloc arena per thread makes memory creep up; two are plenty.
+Environment=MALLOC_ARENA_MAX=2
+Environment=PYTHONDONTWRITEBYTECODE=1
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ReadWritePaths=__DIR__/data
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+UMask=0077
+# The journal is shared with the other services: never let this bot flood it.
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=500
+LogLevelMax=info
+
+[Install]
+WantedBy=multi-user.target
