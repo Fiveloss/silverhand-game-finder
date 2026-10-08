@@ -323,7 +323,7 @@ the tests and restarts the service; the database in `data/` and `.env` stay.
 | `GEMINI_LITE_MODEL` | `gemini-flash-lite-latest` | the fallback Gemini model (same key, its own and usually bigger free quota) |
 | `GEMINI_EMBED_MODEL` | `gemini-embedding-001` | the embedding model for meaning-based matching (same key); changing it wipes the vectors, which are then rebuilt over days |
 | `GROQ_API_KEY` | — | Groq key, the last fallback while Gemini rests after a rate limit or fails; free: [console.groq.com/keys](https://console.groq.com/keys) |
-| `GROQ_MODEL` | `llama-3.3-70b-versatile` | the Groq model |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | the Groq model |
 | `LLM_DAILY_GAMES` | `400` | review analyses a day (UTC); the background takes at most 80%; after that, heuristics until tomorrow |
 | `IGDB_CLIENT_ID` · `IGDB_CLIENT_SECRET` | — | a Twitch app for IGDB: games outside Steam as references; free |
 | `STEAM_API_KEY` | — | Steam Web API key: the co-play graph from the public libraries of reviewers |
@@ -331,7 +331,7 @@ the tests and restarts the service; the database in `data/` and `.env` stay.
 | `STORE_CC` | `kz` | Steam store region for the catalog and game facts; card prices come from each player's own region |
 | `ANIMATE_CARDS` | `1` | `1` turns cards into 2-second loops (ffmpeg comes with the requirements); `0` keeps pictures |
 | `PASSPORT_MAX_AGE_DAYS` | `30` | days before a passport is rebuilt |
-| `CATALOG_PAGES` | `5` | catalog depth: once a day the bot takes `CATALOG_PAGES` × 400 top sellers, × 200 top rated and 200 popular new releases |
+| `CATALOG_PAGES` | `10` | catalog depth: once a day the bot takes `CATALOG_PAGES` × 400 top sellers, × 200 top rated and 200 popular new releases |
 | `DB_PATH` | `data/gamefinder.db` | the database file |
 | `LOG_LEVEL` | `INFO` | log verbosity |
 

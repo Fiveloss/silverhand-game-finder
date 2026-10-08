@@ -138,6 +138,18 @@ def test_provider_routing_and_daily_limits():
     assert [p.kind for p in no_groq.order("intent")] == ["lite", "flash"]
 
 
+def test_one_game_per_series():
+    from gamefinder.recommender import Pick, diversify, series_key
+    assert series_key("The Witcher 2: Assassins of Kings Enhanced Edition") == "witcher"
+    assert series_key("Dead Space 2") == series_key("Dead Space") == "dead space"
+    c = Catalog()
+    c.games = {1: {"name": "The Witcher 2"}, 2: {"name": "The Witcher"}, 3: {"name": "Cyberpunk 2077"},
+               4: {"name": "Dragon Age"}}
+    c.vecs = {1: {"RPG": 1.0}, 2: {"RPG": 1.0}, 3: {"Cyberpunk": 1.0}, 4: {"Fantasy": 1.0}}
+    picks = [Pick(a, s, {}, {}, False) for a, s in ((1, 1.1), (2, 1.0), (3, 0.9), (4, 0.8))]
+    assert [p.appid for p in diversify(picks, c, 3)] == [1, 3, 4]
+
+
 def test_complaint_reads_against_taste():
     p = normalize({"feel": {}, "complaints": [
         {"point": "слишком медленно", "share": "most", "kind": "taste", "axis": "pace", "direction": "low"}]})

@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 CATALOG_REFRESH = 24 * 3600
 MIN_REVIEWS = 200
 
-SCOUT_LOOKUP_SECONDS = 10
+SCOUT_LOOKUP_SECONDS = 6
 # What a flaky network or a broken answer can raise from the HTTP helpers.
 NET_ERRORS = (HttpError, OSError, asyncio.TimeoutError, aiohttp.ClientError, ValueError)
 
@@ -67,13 +67,14 @@ class Service:
         self._tick = 0
 
     # --- games
-    async def ensure_game(self, appid: int, name: str = "") -> dict | None:
-        """The game's row, fetching tags and store facts first if they are missing."""
+    async def ensure_game(self, appid: int, name: str = "", light: bool = False) -> dict | None:
+        """The game's row, fetching tags and store facts first if they are missing.
+        light: player tags only (what scoring needs); the slower store page is left to the worker."""
         g = self.db.game(appid)
-        if g and g["store_ok"] and g["spy_ok"]:
+        if g and g["spy_ok"] and (light or g["store_ok"]):
             return g
         need_spy = not g or not g["spy_ok"]
-        need_store = not g or not g["store_ok"]
+        need_store = (not g or not g["store_ok"]) and not light
 
         async def nothing():
             return None
@@ -100,7 +101,7 @@ class Service:
             self.db.upsert_game(appid, store_ok=-1)    # not in this region's store, or not a game page
         return self.db.game(appid)
 
-    async def resolve(self, text: str, limit: int = 5, strict: bool = False) -> list[dict]:
+    async def resolve(self, text: str, limit: int = 5, strict: bool = False, light: bool = False) -> list[dict]:
         """Games matching a title typed by a player: exact local match first, then store search.
         strict: only games that surely are the one named (a reference must not be a lookalike —
         "Alan Wake 2" is not on Steam and must not turn into "Alan Wake"); best match first."""
@@ -115,7 +116,7 @@ class Service:
                                key=lambda i: -titles.score(text, i["name"]))
             out = []
             for item in found:
-                g = self.db.game(item["appid"]) or await self.ensure_game(item["appid"], item["name"])
+                g = self.db.game(item["appid"]) or await self.ensure_game(item["appid"], item["name"], light=light)
                 if g and not g["is_dlc"]:
                     out.append(g)
             if strict:
@@ -427,7 +428,7 @@ class Service:
         async def find(idea: dict):
             async with sem:
                 try:
-                    found = await self.resolve(idea["title"], limit=5, strict=True)
+                    found = await self.resolve(idea["title"], limit=5, strict=True, light=True)
                 except Exception:
                     return None
             return (found[0], idea) if found else None

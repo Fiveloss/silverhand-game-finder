@@ -39,7 +39,7 @@ class Config:
     gemini_lite_model: str = "gemini-flash-lite-latest"
     gemini_embed_model: str = "gemini-embedding-001"
     groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-120b"
     llm_daily_games: int = 400
     # Optional sources.
     steam_api_key: str = ""
@@ -51,7 +51,7 @@ class Config:
     store_cc: str = "kz"
     animate_cards: bool = True      # swap each card for a 2-second loop once it is rendered
     passport_max_age_days: int = 30
-    catalog_pages: int = 5
+    catalog_pages: int = 10
     log_level: str = "INFO"
 
 
@@ -85,7 +85,7 @@ def _build(token: str, e) -> Config:
         gemini_lite_model=e("GEMINI_LITE_MODEL", "gemini-flash-lite-latest").strip(),
         gemini_embed_model=e("GEMINI_EMBED_MODEL", "gemini-embedding-001").strip(),
         groq_api_key=e("GROQ_API_KEY", "").strip(),
-        groq_model=e("GROQ_MODEL", "llama-3.3-70b-versatile").strip(),
+        groq_model=e("GROQ_MODEL", "openai/gpt-oss-120b").strip(),
         llm_daily_games=int(e("LLM_DAILY_GAMES", "400")),
         steam_api_key=e("STEAM_API_KEY", "").strip(),
         igdb_client_id=e("IGDB_CLIENT_ID", "").strip(),
@@ -95,6 +95,6 @@ def _build(token: str, e) -> Config:
         store_cc=e("STORE_CC", "kz").strip().lower(),
         animate_cards=e("ANIMATE_CARDS", "1").strip().lower() in ("1", "true", "yes"),
         passport_max_age_days=int(e("PASSPORT_MAX_AGE_DAYS", "30")),
-        catalog_pages=int(e("CATALOG_PAGES", "5")),
+        catalog_pages=int(e("CATALOG_PAGES", "10")),
         log_level=e("LOG_LEVEL", "INFO"),
     )

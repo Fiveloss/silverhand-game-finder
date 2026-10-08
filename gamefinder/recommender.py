@@ -14,10 +14,12 @@ are spread out so three results are not three versions of the same game.
 
 import math
 import random
+import re
 from collections.abc import Callable
 import time
 from dataclasses import dataclass, field
 
+from . import titles
 from .analyst import AXES, heuristic_passport
 from .reviews import quality_score, wilson_lower
 from .taste import Taste, cosine, tag_vector
@@ -279,10 +281,27 @@ def recommend(catalog: Catalog, taste: Taste, passports: dict[int, dict], review
     return chosen
 
 
+def series_key(name: str) -> str:
+    """The series a title belongs to: its main part without sequel numbers
+    ("The Witcher 2: Assassins of Kings" -> "witcher", "Dead Space 2" -> "dead space")."""
+    main = re.split(r":| - | – | — ", name or "")[0]
+    return " ".join(w for w in titles.core(main).split() if not w.isdigit())
+
+
 def diversify(picks: list[Pick], catalog: Catalog, limit: int, penalty: float = 0.3) -> list[Pick]:
+    """The best picks that are not alike: a tag-similarity penalty, and one game per series
+    (a sequel of the reference is fine; two more parts of one series make a lazy selection)."""
     chosen: list[Pick] = []
+    series: set[str] = set()
+
+    def key(p: Pick) -> str:
+        return series_key((catalog.games.get(p.appid) or {}).get("name", ""))
+
     rest = list(picks)
     while rest and len(chosen) < limit:
+        rest = [p for p in rest if not key(p) or key(p) not in series]
+        if not rest:
+            break
         def adjusted(p: Pick) -> float:
             if not chosen:
                 return p.score
@@ -290,6 +309,8 @@ def diversify(picks: list[Pick], catalog: Catalog, limit: int, penalty: float = 
         best = max(rest, key=adjusted)
         chosen.append(best)
         rest.remove(best)
+        if key(best):
+            series.add(key(best))
     return chosen
 
 

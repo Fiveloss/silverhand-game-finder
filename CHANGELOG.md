@@ -10,8 +10,13 @@ a day) was used up; checked on 12 real requests, it now takes about 20–30 s.
 - A daily 429 rests a provider until its quota resets (Gemini says when), instead of
   being asked again every 10 minutes.
 - Short timeouts for calls a player waits for, and one retry after a hang.
-- The scout waits at most 10 s for Steam lookups; late ones finish in the background and
+- The scout waits at most 6 s for Steam lookups (player tags only; the store page comes later); late ones finish in the background and
   reach the catalog. Similar games of a non-Steam reference are looked up at once.
+- Groq's default model is `openai/gpt-oss-120b` (Llama 3.3 70B left Groq's free tier); quick
+  calls on it answer in about a second.
+- One game per series in a selection: a sequel of the reference is fine, two more parts of
+  one series are not.
+- A bigger catalog by default (`CATALOG_PAGES=10`): more of the scout's ideas are found locally.
 - `tools/eval_picks.py`: runs real requests through the whole pipeline and prints the
   picks, the score parts, the judge's reasons and where the time went.
 

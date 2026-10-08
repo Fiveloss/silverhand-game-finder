@@ -250,7 +250,12 @@ async def post_llm(http, p, payload: dict, task: str) -> tuple[int, object]:
 
 
 def payload_extra(p, task: str) -> dict:
-    return dict(QUICK_EXTRA.get(getattr(p, "kind", ""), {})) if task != "passport" else {}
+    if task == "passport":
+        return {}
+    if getattr(p, "kind", "") == "groq":
+        # Groq's reasoning models (gpt-oss, qwen) take the hint; others (llama) refuse the field.
+        return {"reasoning_effort": "low"} if "gpt-oss" in getattr(p, "model", "") else {}
+    return dict(QUICK_EXTRA.get(getattr(p, "kind", ""), {}))
 
 
 def check_status(p, status: int, body) -> None:

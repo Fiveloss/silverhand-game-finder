@@ -342,7 +342,7 @@ class FakeService:
     def passport_fresh(self, appid: int) -> bool:
         return self.db.passport(appid) is not None
 
-    async def resolve(self, text: str, limit: int = 5, strict: bool = False) -> list[dict]:
+    async def resolve(self, text: str, limit: int = 5, strict: bool = False, light: bool = False) -> list[dict]:
         self.resolved.append((text, strict))
         if "resolve" in self.fail:
             raise OSError("network is down")
