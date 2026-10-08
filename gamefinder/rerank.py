@@ -14,7 +14,7 @@ import logging
 import re
 import time
 
-from .analyst import AXES, RateLimited, _parse_json
+from .analyst import (AXES, RateLimited, _parse_json, check_status, post_llm, providers_for)
 from .recommender import DEALBREAKERS, MOODS
 
 log = logging.getLogger(__name__)
@@ -211,10 +211,8 @@ async def _post(analyst, p, system: str, prompt: str) -> tuple[dict, int, int]:
         "temperature": 0.3,
         "max_tokens": 4096,     # thinking models spend part of it before answering
     }
-    status, body = await analyst.http.post_json(p.url, payload, headers={"Authorization": f"Bearer {p.key}"},
-                                                timeout=60)
-    if status == 429:
-        raise RateLimited(600 if p.resting_until else 90)
+    status, body = await post_llm(analyst.http, p, payload, "judge")
+    check_status(p, status, body)
     if status != 200 or not isinstance(body, dict):
         raise RuntimeError(f"HTTP {status}")
     text = ((body.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
@@ -229,7 +227,7 @@ async def rerank(analyst, profile: dict, candidates: list[dict], k: int = 3,
     Tries each provider that is not resting, like Analyst.passport. `usage`, when given, is filled
     with {"in", "out", "model"} so the caller can count the tokens against the daily budget."""
     try:
-        providers = list(getattr(analyst, "providers", None) or [])
+        providers = providers_for(analyst, "judge") if analyst else []
         cands = [c for c in candidates or [] if isinstance(c, dict) and clean(c.get("id"), 40)][:MAX_CANDIDATES]
         if not providers or not cands or k < 1:
             return None
@@ -243,8 +241,6 @@ async def rerank(analyst, profile: dict, candidates: list[dict], k: int = 3,
         return None
 
     for p in providers:
-        if p.resting_until > time.time():
-            continue
         try:
             data, tin, tout = await _post(analyst, p, system, prompt)
             picks = parse_picks(data, ids, k)
@@ -257,7 +253,7 @@ async def rerank(analyst, profile: dict, candidates: list[dict], k: int = 3,
             p.resting_until = time.time() + e.seconds
             log.info("rerank: %s limited, resting %ss", p.name, e.seconds)
         except Exception as e:
-            log.warning("rerank: %s failed: %s", p.name, e)
+            log.warning("rerank: %s failed: %s %s", p.name, type(e).__name__, e)
     return None
 
 

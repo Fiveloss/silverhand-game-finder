@@ -77,8 +77,9 @@ and you asked for something calm, that counts for it.
   never turns into Alan Wake
 - 👥 **What players like you play**: a co-play graph built from the public libraries of
   Steam reviewers, and meaning-based matching that quotes real reviews
-- 🧠 **Free LLMs, optional**: Gemini Flash, then Gemini Flash Lite, then Groq read the
-  reviews, understand the request, propose candidates and judge the final three. The
+- 🧠 **Free LLMs, optional**: Gemini Flash Lite, Gemini Flash and Groq read the reviews,
+  understand the request, propose candidates and judge the final three, each on the job
+  it does best within its free quota. The
   keys are free, need no card, and are optional: without them the bot runs on heuristics
 - 🙈 **Remembers nothing about your taste**: only your Steam region (for prices) and
   the current request; every new request starts from scratch
@@ -213,9 +214,13 @@ flowchart LR
   allows few tokens a minute), with negatives over-sampled (at least 35%) and the real
   share passed separately. Each complaint is either about quality (bugs, performance,
   monetization, abandoned development, servers) or about taste, with an axis and a
-  direction: "too slow" is pace, low. Gemini Flash answers first, Gemini Flash Lite (same
-  key, its own quota) when Flash is overloaded, then Groq. A provider that hits a rate
-  limit (HTTP 429) rests for 90 seconds, 10 minutes if it happens again. Without keys,
+  direction: "too slow" is pace, low. Each job has its own order of providers: the free
+  Gemini Flash quota is tiny (about 20 calls a day), so it is kept for the judge; reviews
+  are read by Gemini Flash Lite (same key, a much bigger quota), then Groq; quick calls a
+  player waits for (understanding the request, the scout, cards of non-Steam games) go to
+  Groq, then Flash Lite with little "thinking", and have short timeouts. A provider that
+  hits a per-minute limit (HTTP 429) rests for 90 seconds, 10 minutes if it happens again;
+  a daily limit rests it until the quota resets (Gemini says when). Without keys,
   past the daily cap or when nobody answers, the passport is built by heuristics from
   tags and keywords and is read again by a model later. A passport lasts 30 days.
 - **Meaning-based matching.** For every analysed game, Gemini's free embedding model
@@ -374,6 +379,7 @@ The tests are plain Python files with no framework: each `tests*.py` runs on its
 | `gamefinder/db.py` · `http.py` | SQLite; HTTP with per-host pacing |
 | `deploy/` | `install.sh` and the systemd unit |
 | `tools/make_intro.py` · `make_cards.py` | the description animation, the menu screens' animations and the banner; the README card previews |
+| `tools/eval_picks.py` | real requests through the whole pipeline on a copy of the database: picks, score parts, the judge's reasons, timing |
 
 ## Privacy
 

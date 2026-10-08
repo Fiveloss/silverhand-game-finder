@@ -112,6 +112,32 @@ def test_normalize_repairs_a_sloppy_model_answer():
     complaint_fit(Taste(feel={k: 2.0 for k in AXES}, confidence={k: 1.0 for k in AXES}), p)  # must not raise
 
 
+def test_provider_routing_and_daily_limits():
+    """Flash's tiny free quota goes to the judge only; a daily 429 rests a provider until the reset."""
+    from types import SimpleNamespace
+    from gamefinder.analyst import Analyst, limit_rest, payload_extra, providers_for
+    cfg = SimpleNamespace(gemini_api_key="k", gemini_model="flash", gemini_lite_model="lite",
+                          groq_api_key="g", groq_model="llama")
+    a = Analyst.from_config(None, cfg)
+    kinds = lambda task: [p.kind for p in providers_for(a, task)]  # noqa: E731
+    assert kinds("passport") == ["lite", "groq"]
+    assert kinds("judge") == ["flash", "groq", "lite"]
+    assert kinds("intent") == ["groq", "lite", "flash"]
+    flash = a.order("judge")[0]
+    daily = [{"error": {"code": 429, "details": [
+        {"@type": "type.googleapis.com/google.rpc.QuotaFailure",
+         "violations": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier", "quotaValue": "20"}]},
+        {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "58009s"}]}}]
+    assert limit_rest(flash, daily) == 58009
+    assert limit_rest(flash, {"error": {"code": 429}}) == 90
+    flash.resting_until = time.time() + limit_rest(flash, daily)
+    assert kinds("judge") == ["groq", "lite"]
+    assert payload_extra(flash, "judge") == {"reasoning_effort": "low"}
+    assert payload_extra(flash, "passport") == {} and payload_extra(a.order("judge")[1], "judge") == {}
+    no_groq = Analyst.from_config(None, SimpleNamespace(**{**vars(cfg), "groq_api_key": ""}))
+    assert [p.kind for p in no_groq.order("intent")] == ["lite", "flash"]
+
+
 def test_complaint_reads_against_taste():
     p = normalize({"feel": {}, "complaints": [
         {"point": "слишком медленно", "share": "most", "kind": "taste", "axis": "pace", "direction": "low"}]})

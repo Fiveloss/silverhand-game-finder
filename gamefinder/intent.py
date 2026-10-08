@@ -26,7 +26,7 @@ import re
 import time
 from dataclasses import asdict, dataclass, field
 
-from .analyst import AXES, GENRE_TAGS, TAG_AXES, RateLimited, _parse_json
+from .analyst import (AXES, GENRE_TAGS, TAG_AXES, RateLimited, _parse_json, check_status, post_llm, providers_for)
 from .recommender import DEALBREAKERS, MOODS
 
 log = logging.getLogger(__name__)
@@ -847,10 +847,8 @@ async def _post(analyst, p, system: str, prompt: str) -> tuple[dict, int, int]:
         "temperature": 0.1,
         "max_tokens": 3072,     # thinking models spend part of it before answering
     }
-    status, body = await analyst.http.post_json(p.url, payload, headers={"Authorization": f"Bearer {p.key}"},
-                                                timeout=45)
-    if status == 429:
-        raise RateLimited(600 if p.resting_until else 90)
+    status, body = await post_llm(analyst.http, p, payload, "intent")
+    check_status(p, status, body)
     if status != 200 or not isinstance(body, dict):
         raise RuntimeError(f"HTTP {status}")
     text = ((body.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
@@ -866,15 +864,13 @@ async def parse(analyst, text: str, *, usage: dict | None = None) -> Request:
     hard filter is worse than an extra one) and the heuristic's seeds / avoid / hours fill in what the
     LLM left empty. `usage`, when given, gets {"in", "out", "model"} for the daily token budget."""
     h = parse_heuristic(text)
-    providers = list(getattr(analyst, "providers", None) or [])
+    providers = providers_for(analyst, "intent") if analyst else []
     # Nothing to understand: an empty message or a bare «удиви меня» is not worth a request.
     if not providers or not h.text or (h.surprise and not h.words and not h.seeds and not h.tags_want):
         return h
     prompt = f"<<<DATA\n{h.text}\nDATA>>>"
     system = system_prompt()
     for p in providers:
-        if p.resting_until > time.time():
-            continue
         try:
             data, tin, tout = await _post(analyst, p, system, prompt)
             if not isinstance(data, dict) or not (_FIELDS & set(data)):
@@ -887,7 +883,7 @@ async def parse(analyst, text: str, *, usage: dict | None = None) -> Request:
             p.resting_until = time.time() + e.seconds
             log.info("intent: %s limited, resting %ss", p.name, e.seconds)
         except Exception as e:
-            log.warning("intent: %s failed: %s", p.name, e)
+            log.warning("intent: %s failed: %s %s", p.name, type(e).__name__, e)
     return h
 
 

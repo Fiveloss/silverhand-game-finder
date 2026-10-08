@@ -18,7 +18,7 @@ import re
 import sqlite3
 import time
 
-from .analyst import AXES, GENRE_TAGS, RateLimited, _parse_json, clamp, normalize
+from .analyst import (AXES, GENRE_TAGS, RateLimited, _parse_json, clamp, normalize, check_status, post_llm, providers_for)
 
 log = logging.getLogger(__name__)
 
@@ -277,9 +277,8 @@ async def _call(http, p, title: str) -> dict:
         "temperature": 0.1,
         "max_tokens": 3000,
     }
-    status, body = await http.post_json(p.url, payload, headers={"Authorization": f"Bearer {p.key}"})
-    if status == 429:
-        raise RateLimited(600 if p.resting_until else 90)
+    status, body = await post_llm(http, p, payload, "card")
+    check_status(p, status, body)
     if status != 200 or not isinstance(body, dict) or not body.get("choices"):
         raise RuntimeError(f"HTTP {status}")
     text = ((body["choices"][0] or {}).get("message") or {}).get("content") or ""
@@ -298,9 +297,7 @@ async def describe(analyst, db_conn, title: str) -> dict | None:
         hit, card = _cached(conn, key)
         if hit:
             return card
-        for p in getattr(analyst, "providers", None) or []:
-            if p.resting_until > time.time():
-                continue
+        for p in providers_for(analyst, "card") if analyst else []:
             try:
                 data = await _call(analyst.http, p, title)
             except RateLimited as e:
@@ -308,7 +305,7 @@ async def describe(analyst, db_conn, title: str) -> dict | None:
                 log.info("external %r: %s rate limited, resting %ss", title, p.name, e.seconds)
                 continue
             except Exception as e:
-                log.warning("external %r: %s failed: %s", title, p.name, e)
+                log.warning("external %r: %s failed: %s %s", title, p.name, type(e).__name__, e)
                 continue
             card = validate(data, title)
             if card is None:

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.1 — 2026-10-08
+
+Faster picks: a request took 2–3 minutes once Gemini Flash's free quota (now about 20 calls
+a day) was used up; checked on 12 real requests, it now takes about 20–30 s.
+
+- Each job has its own order of providers: reviews on Gemini Flash Lite (then Groq), quick
+  calls on Groq then Flash Lite with little thinking, the judge on Flash while its quota lasts.
+- A daily 429 rests a provider until its quota resets (Gemini says when), instead of
+  being asked again every 10 minutes.
+- Short timeouts for calls a player waits for, and one retry after a hang.
+- The scout waits at most 10 s for Steam lookups; late ones finish in the background and
+  reach the catalog. Similar games of a non-Steam reference are looked up at once.
+- `tools/eval_picks.py`: runs real requests through the whole pipeline and prints the
+  picks, the score parts, the judge's reasons and where the time went.
+
 ## 0.3.0 — 2026-10-08
 
 Help in the moment, with one panel instead of a stream of messages.
@@ -36,8 +51,10 @@ Help in the moment, with one panel instead of a stream of messages.
 - Reviews are never read while a player waits for picks: unread candidates work from
   player tags and go first in the background queue, which reads the catalog ahead
   within 80% of `LLM_DAILY_GAMES` and rebuilds missing meaning vectors.
-- Gemini Flash Lite (`GEMINI_LITE_MODEL`, same key) answers between Gemini Flash and
-  Groq. Embeddings default to `gemini-embedding-001` (the free quota of
+- Gemini Flash Lite (`GEMINI_LITE_MODEL`, same key) joins the providers. Each job has its
+  own order: reviews on Flash Lite, quick calls on Groq then Flash Lite with little
+  thinking and short timeouts, the judge on Flash (its free quota is about 20 calls a day).
+  A daily 429 rests a provider until its quota resets. Embeddings default to `gemini-embedding-001` (the free quota of
   `gemini-embedding-2` runs out at once); changing the model wipes the vectors.
   `LLM_DAILY_GAMES` defaults to 400 and counts review analyses only (the scout and
   the judge add their tokens, not games).

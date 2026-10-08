@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 CATALOG_REFRESH = 24 * 3600
 MIN_REVIEWS = 200
 
+SCOUT_LOOKUP_SECONDS = 10
 # What a flaky network or a broken answer can raise from the HTTP helpers.
 NET_ERRORS = (HttpError, OSError, asyncio.TimeoutError, aiohttp.ClientError, ValueError)
 
@@ -60,6 +61,7 @@ class Service:
         self._analysis_failed: set[int] = set()
         self._reindex_failed: set[int] = set()
         self._fetch_failed: set[int] = set()
+        self._late: set[asyncio.Task] = set()      # scout lookups still running after the request
         self._analysis_rest = 0.0
         self._embed_rest = 0.0
         self._tick = 0
@@ -383,8 +385,12 @@ class Service:
         g = external.card_as_game(card)
         ext_passports[g["appid"]] = external.card_passport(card)
         if boost is not None:
-            for name in card.get("steam_similar", [])[:5]:
-                sim = await self.resolve(name, limit=5, strict=True)
+            async def similar(name: str):
+                try:
+                    return await self.resolve(name, limit=5, strict=True)
+                except NET_ERRORS:
+                    return []
+            for sim in await asyncio.gather(*(similar(n) for n in card.get("steam_similar", [])[:5])):
                 if sim:
                     boost[sim[0]["appid"]] = 0.6
         return g
@@ -426,7 +432,17 @@ class Service:
                     return None
             return (found[0], idea) if found else None
 
-        looked = await asyncio.gather(*(find(i) for i in unknown[:6]))
+        # A player is waiting: whatever Steam has not answered in SCOUT_LOOKUP_SECONDS is dropped (the
+        # lookups that did finish stay in the catalog for next time).
+        tasks = [asyncio.create_task(find(i)) for i in unknown[:6]]
+        looked = []
+        if tasks:
+            done, pending = await asyncio.wait(tasks, timeout=SCOUT_LOOKUP_SECONDS)
+            # The late ones finish on their own: the game lands in the catalog for «Ещё 3».
+            self._late.update(pending)
+            for t in pending:
+                t.add_done_callback(self._late.discard)
+            looked = [t.result() for t in done if not t.cancelled() and t.exception() is None]
         scout, why = {}, {}
         for hit in hits + list(looked):
             if not hit:

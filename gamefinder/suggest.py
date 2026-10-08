@@ -18,7 +18,7 @@ import re
 import time
 
 from . import intent, titles
-from .analyst import AXES, RateLimited, _parse_json
+from .analyst import (AXES, RateLimited, _parse_json, check_status, post_llm, providers_for)
 from .recommender import DEALBREAKERS, MOODS
 from .rerank import clean
 
@@ -273,13 +273,8 @@ async def _post(analyst, p, system: str, prompt: str, n: int) -> tuple[str, int,
         "temperature": 0.4,
         "max_tokens": 2048 + 120 * n,      # thinking models spend part of it before answering
     }
-    status, body = await analyst.http.post_json(p.url, payload, headers={"Authorization": f"Bearer {p.key}"},
-                                                timeout=60)
-    if status == 429:
-        # A per-minute limit clears quickly; a daily one keeps answering 429, so rest longer next time.
-        raise RateLimited(600 if p.resting_until else 90)
-    if status in (500, 502, 503, 504):
-        raise RateLimited(60)
+    status, body = await post_llm(analyst.http, p, payload, "scout")
+    check_status(p, status, body)
     if status != 200 or not isinstance(body, dict):
         raise RuntimeError(f"HTTP {status}")
     text = ((body.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
@@ -296,7 +291,7 @@ async def suggest(analyst, req, seed_names: list[str], exclude_names: list[str],
     it already rested; 5xx rests it 60 s). `usage`, when given, gets {"in", "out", "model"}: tokens
     of every answered call, so a junk answer that was paid for still counts."""
     try:
-        providers = list(getattr(analyst, "providers", None) or [])
+        providers = providers_for(analyst, "scout") if analyst else []
         k = min(int(k), MAX_K)
         if not providers or k < 1 or req is None:
             return None
@@ -311,8 +306,6 @@ async def suggest(analyst, req, seed_names: list[str], exclude_names: list[str],
 
     spent_in = spent_out = 0
     for p in providers:
-        if p.resting_until > time.time():
-            continue
         model = f"{p.name}/{p.model}"
         try:
             text, tin, tout = await _post(analyst, p, system, prompt, n)
@@ -327,5 +320,5 @@ async def suggest(analyst, req, seed_names: list[str], exclude_names: list[str],
             p.resting_until = time.time() + e.seconds
             log.info("suggest: %s limited, resting %ss", p.name, e.seconds)
         except Exception as e:
-            log.warning("suggest: %s failed: %s", p.name, e)
+            log.warning("suggest: %s failed: %s %s", p.name, type(e).__name__, e)
     return None

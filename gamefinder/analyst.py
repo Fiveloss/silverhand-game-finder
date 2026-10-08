@@ -9,6 +9,7 @@ monetization) or about taste, with the axis and direction it points to. "Too slo
 complaint on pace, low; for someone who likes slow games it is a reason to recommend.
 """
 
+import asyncio
 import json
 import logging
 import math
@@ -205,6 +206,83 @@ class Provider:
     model: str
     max_reviews: int        # free tiers cap tokens per minute; Groq's is small
     resting_until: float = 0.0
+    kind: str = ""          # "flash" | "lite" | "groq": which tasks it is spent on (Analyst.order)
+
+
+# Which provider does which job. The free Gemini Flash quota is tiny (about 20 calls a day per
+# model), so it is kept for the judge, where its quality shows most; the background reading of
+# reviews never touches it. Quick calls a player waits for go to the fastest providers first.
+TASK_ORDER = {
+    "passport": ("lite", "groq"),
+    "intent": ("groq", "lite", "flash"),
+    "scout": ("groq", "lite", "flash"),
+    "card": ("groq", "lite", "flash"),
+    "judge": ("flash", "groq", "lite"),
+}
+# Seconds one attempt may take. A free tier sometimes hangs on a call it would answer at once
+# when asked again, so a player-facing call that hangs is tried once more, then the next provider.
+TASK_TIMEOUT = {"intent": 15, "scout": 20, "card": 20, "judge": 25, "passport": 180}
+TASK_ATTEMPTS = {"passport": 1}
+# A thinking model answers a short structured question about twice as fast with little thinking.
+QUICK_EXTRA = {"flash": {"reasoning_effort": "low"}, "lite": {"reasoning_effort": "low"}}
+
+
+def providers_for(analyst, task: str) -> list:
+    """The providers to try for a task, in order, skipping those resting after a limit."""
+    order = getattr(analyst, "order", None)
+    ps = order(task) if callable(order) else list(getattr(analyst, "providers", None) or [])
+    return [p for p in ps if p.resting_until <= time.time()]
+
+
+async def post_llm(http, p, payload: dict, task: str) -> tuple[int, object]:
+    """(status, body) of one chat call for `task`, with its timeout and one retry after a hang."""
+    payload = {**payload, **payload_extra(p, task)}
+    attempts = TASK_ATTEMPTS.get(task, 2)
+    for attempt in range(attempts):
+        try:
+            return await http.post_json(p.url, payload, headers={"Authorization": f"Bearer {p.key}"},
+                                        timeout=TASK_TIMEOUT.get(task, 60))
+        except (asyncio.TimeoutError, TimeoutError):
+            if attempt == attempts - 1:
+                raise
+            log.info("%s: %s hung, asking again", task, p.name)
+    raise RuntimeError("unreachable")
+
+
+def payload_extra(p, task: str) -> dict:
+    return dict(QUICK_EXTRA.get(getattr(p, "kind", ""), {})) if task != "passport" else {}
+
+
+def check_status(p, status: int, body) -> None:
+    """Raise RateLimited for a limit or an overload, with the rest the answer asks for."""
+    if status == 429:
+        raise RateLimited(limit_rest(p, body))
+    if status in (500, 502, 503, 504):
+        raise RateLimited(60)       # "high demand": Google's own overload, usually gone in a minute
+
+
+def limit_rest(p, body) -> int:
+    """How long to leave a provider alone after a 429. A daily quota (Gemini says so in the answer,
+    with the time until it resets) rests it until then; a per-minute one 90 s, 600 s if repeated."""
+    err = body[0] if isinstance(body, list) and body else body
+    err = (err or {}).get("error") if isinstance(err, dict) else None
+    daily, retry = False, 0
+    for d in (err or {}).get("details") or [] if isinstance(err, dict) else []:
+        if not isinstance(d, dict):
+            continue
+        for v in d.get("violations") or []:
+            if isinstance(v, dict) and "PerDay" in str(v.get("quotaId", "")):
+                daily = True
+        delay = str(d.get("retryDelay") or "")
+        if delay.endswith("s"):
+            try:
+                retry = int(float(delay[:-1]))
+            except ValueError:
+                pass
+    if daily:
+        return max(600, min(retry or 6 * 3600, 26 * 3600))
+    return 600 if getattr(p, "resting_until", 0) else 90
+
 
 
 class Analyst:
@@ -216,13 +294,21 @@ class Analyst:
     def from_config(cls, http, cfg) -> "Analyst":
         return cls(http, [
             Provider("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-                     cfg.gemini_api_key, cfg.gemini_model, max_reviews=60),
-            # Same free key, a lighter model with its own quota: answers when Flash is overloaded.
+                     cfg.gemini_api_key, cfg.gemini_model, max_reviews=60, kind="flash"),
+            # Same free key, a lighter model with its own, much bigger quota.
             Provider("Gemini Lite", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-                     cfg.gemini_api_key, cfg.gemini_lite_model, max_reviews=60),
+                     cfg.gemini_api_key, cfg.gemini_lite_model, max_reviews=60, kind="lite"),
             Provider("Groq", "https://api.groq.com/openai/v1/chat/completions",
-                     cfg.groq_api_key, cfg.groq_model, max_reviews=25),
+                     cfg.groq_api_key, cfg.groq_model, max_reviews=25, kind="groq"),
         ])
+
+    def order(self, task: str) -> list[Provider]:
+        """Providers for a task (TASK_ORDER), resting ones included; unknown kinds go last."""
+        ranks = TASK_ORDER.get(task)
+        if not ranks:
+            return list(self.providers)
+        known = sorted((p for p in self.providers if p.kind in ranks), key=lambda p: ranks.index(p.kind))
+        return known + [p for p in self.providers if not p.kind]
 
     @property
     def enabled(self) -> bool:
@@ -236,9 +322,7 @@ class Analyst:
         """(passport, input tokens, output tokens, "provider/model"). Tries each provider that is
         not resting after a rate limit; raises when none could answer, and the caller falls back."""
         errors = []
-        for p in self.providers:
-            if p.resting_until > time.time():
-                continue
+        for p in providers_for(self, "passport"):
             prompt = build_prompt(game, stats, sample[:p.max_reviews], (extra or [])[:p.max_reviews // 3])
             try:
                 data, tin, tout = await self._call(p, prompt)
@@ -247,7 +331,7 @@ class Analyst:
                 p.resting_until = time.time() + e.seconds
                 errors.append(f"{p.name}: limit, resting {e.seconds}s")
             except Exception as e:
-                errors.append(f"{p.name}: {e}")
+                errors.append(f"{p.name}: {type(e).__name__} {e}")
         raise RuntimeError("; ".join(errors) or "all providers are resting after rate limits")
 
     async def _call(self, p: Provider, prompt: str) -> tuple[dict, int, int]:
@@ -259,12 +343,8 @@ class Analyst:
             "temperature": 0.2,
             "max_tokens": 8192,
         }
-        status, body = await self.http.post_json(p.url, payload, headers={"Authorization": f"Bearer {p.key}"})
-        if status == 429:
-            # A per-minute limit clears quickly; a daily one keeps answering 429, so rest longer next time.
-            raise RateLimited(600 if p.resting_until else 90)
-        if status in (500, 502, 503, 504):
-            raise RateLimited(60)       # "high demand": Google's own overload, usually gone in a minute
+        status, body = await post_llm(self.http, p, payload, "passport")
+        check_status(p, status, body)
         if status != 200 or not body:
             err = body.get("error", {}) if isinstance(body, dict) else {}
             if isinstance(err, list):
