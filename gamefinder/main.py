@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import time
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher
@@ -48,10 +49,12 @@ async def run() -> None:
     log.info("analyst: %s, up to %d games a day", service.analyst.describe(), cfg.llm_daily_games)
     stop = asyncio.Event()
     worker = asyncio.create_task(service.worker(stop))
+    health = asyncio.create_task(keep_alive(bot, dp))
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
         stop.set()
+        health.cancel()
         # The worker may be inside a slow Steam or model call: give it a moment, then cut it off.
         try:
             await asyncio.wait_for(worker, timeout=5)
@@ -64,11 +67,37 @@ async def run() -> None:
         db.close()
 
 
+async def keep_alive(bot: Bot, dp: Dispatcher, every: float = 60, give_up: float = 300) -> None:
+    """Telegram must answer: polling can stall for hours (a dead connection, a throttled process)
+    while the process looks alive. After `give_up` seconds without an answer the bot stops polling,
+    exits with an error, and systemd starts it afresh."""
+    last_ok = time.monotonic()
+    while True:
+        await asyncio.sleep(every)
+        try:
+            await asyncio.wait_for(bot.get_me(), timeout=30)
+            last_ok = time.monotonic()
+        except Exception as e:
+            down = time.monotonic() - last_ok
+            log.warning("Telegram did not answer for %.0f s: %s", down, e)
+            if down >= give_up:
+                log.error("no answer from Telegram for %.0f s: restarting", down)
+                global EXIT_CODE
+                EXIT_CODE = 1
+                await dp.stop_polling()
+                return
+
+
+EXIT_CODE = 0
+
+
 def main() -> None:
     try:
         asyncio.run(run())
     except KeyboardInterrupt:
         pass
+    if EXIT_CODE:
+        raise SystemExit(EXIT_CODE)       # Restart=always brings the bot back
 
 
 if __name__ == "__main__":

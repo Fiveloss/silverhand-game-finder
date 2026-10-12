@@ -333,6 +333,12 @@ def lang_text() -> str:
                            "Английский или русский: кнопки, карточки и разборы игр.")
 
 
+# The reply keyboard of versions before 0.2 stays on screen until a reply removes it.
+LEGACY_BUTTONS = {"🎮 Подобрать": "home", "🔎 Разбор игры": "game", "❔ Как это работает": "help",
+                  "❓ Как это работает": "help", "❔ Помощь": "help", "🟠 Мой вкус": "home",
+                  "📚 Добавить игры": "home"}
+
+
 def help_text() -> str:
     if not i18n.is_ru():
         return texts.card(
@@ -1082,6 +1088,22 @@ def build_router(app: App) -> Router:
         uid, said = m.from_user.id, m.text.strip()
         state = db.user(uid)["state"]
         await _delete(app.bot, uid, m.message_id)      # keep the chat clean: the panel shows what was understood
+        if said in LEGACY_BUTTONS:
+            # A button of the old reply keyboard, still on the player's screen: do what it said, drop it.
+            try:
+                tmp = await app.bot.send_message(uid, "🟠", reply_markup=ReplyKeyboardRemove())
+                await _delete(app.bot, uid, tmp.message_id)
+            except Exception:
+                pass
+            app.update_session(uid, kb_removed=True)
+            where = LEGACY_BUTTONS[said]
+            if where == "game":
+                await ask_game(uid, fresh=True)
+            elif where == "help":
+                await app.panel(uid, "help", help_text(), back_kb(), fresh=True)
+            else:
+                await home(uid, fresh=True)
+            return
         if uid in app.running:
             app.update_session(uid, pending=said)       # a search is on: take it as a correction afterwards
             await app.panel(uid, "pick", texts.card(tr("Searching", "Ищу"),

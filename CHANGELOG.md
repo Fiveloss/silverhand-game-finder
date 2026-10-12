@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.1 — 2026-10-13
+
+The bot went silent for hours on 12.10: with the bigger catalog it grew past `MemoryHigh=250M`,
+and the kernel throttled it until every Telegram request timed out, while it still looked alive.
+
+- `MemoryHigh=400M`, `MemoryMax=500M` (the working set is ~190 MB plus file cache systemd counts).
+- A health check: every minute the bot asks Telegram `getMe`; after 5 minutes without an answer it
+  stops and exits with an error, and systemd starts it afresh.
+- The pre-0.2 reply keyboard, still on some screens: its buttons do what they say and it goes away,
+  instead of being read as a game request.
 ## 0.5.0 — 2026-10-08
 
 English first.

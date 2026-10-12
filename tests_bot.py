@@ -2109,6 +2109,57 @@ async def test_wrong_reference_asks_for_the_exact_title(h):
     assert "Чем именно зацепила Celeste?" in h.check_panel(FRIEND).caption and h.req(FRIEND).seeds == ["Celeste"]
 
 
+def test_keep_alive_stops_polling_when_telegram_is_gone():
+    """No answer from Telegram for long enough: polling stops and main exits with an error, so systemd
+    restarts the bot (12.10.2026 it hung for 7 hours while looking alive)."""
+    from gamefinder import main as mainmod
+
+    class DeadBot:
+        calls = 0
+
+        async def get_me(self):
+            DeadBot.calls += 1
+            raise OSError("network is down")
+
+    class Dp:
+        stopped = False
+
+        async def stop_polling(self):
+            Dp.stopped = True
+
+    class AliveBot:
+        async def get_me(self):
+            return object()
+
+    mainmod.EXIT_CODE = 0
+    asyncio.run(asyncio.wait_for(mainmod.keep_alive(DeadBot(), Dp(), every=0.01, give_up=0.05), 5))
+    assert Dp.stopped and mainmod.EXIT_CODE == 1 and DeadBot.calls >= 2
+    mainmod.EXIT_CODE, Dp.stopped = 0, False
+
+    async def alive():
+        task = asyncio.create_task(mainmod.keep_alive(AliveBot(), Dp(), every=0.01, give_up=0.05))
+        await asyncio.sleep(0.2)
+        assert not task.done()
+        task.cancel()
+    asyncio.run(alive())
+    assert not Dp.stopped and mainmod.EXIT_CODE == 0
+
+
+@scenario
+async def test_old_reply_keyboard_buttons_still_work(h):
+    """The pre-0.2 reply keyboard can still be on a player's screen: its buttons do what they say and
+    the keyboard goes away, instead of being read as a game request."""
+    await h.send(FRIEND, "/start")
+    m = h.mark()
+    await h.send(FRIEND, "🔎 Разбор игры")
+    assert h.state(FRIEND) == "game" and not h.parsed
+    removed = [c for c in h.since(m, "SendMessage", FRIEND) if getattr(c, "reply_markup", None) is not None
+               and type(c.reply_markup).__name__ == "ReplyKeyboardRemove"]
+    assert removed and h.session(FRIEND)["kb_removed"]
+    await h.send(FRIEND, "🎮 Подобрать")
+    assert h.state(FRIEND) == "" and not h.parsed and not h.s.requests
+
+
 def main():
     logging.basicConfig(level=logging.CRITICAL)
     tests = [(n, f) for n, f in globals().items() if n.startswith("test_") and callable(f)]
