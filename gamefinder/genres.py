@@ -53,18 +53,21 @@ def family(tag: str) -> str:
     return _FAMILY_OF.get(tag, tag)
 
 
-def defining(tags: dict | None, n: int = 3, share: float = 0.4) -> list[str]:
+def defining(tags: dict | None, n: int = 3, share: float = 0.4, skip=()) -> list[str]:
     """The game's most pronounced genre families, best first: genre tags with at least `share` of the
-    top genre tag's votes. Broad genres count only when the game has no specific one."""
-    genre = sorted(((t, v) for t, v in (tags or {}).items() if t in GENRE_TAGS and v > 0), key=lambda kv: -kv[1])
-    if not genre:
+    top genre tag's votes. Broad genres count only when the game has no specific one. Families in
+    `skip` (ruled out by the player) are left out before choosing, so the next ones take their place."""
+    every = sorted(((t, v) for t, v in (tags or {}).items() if t in GENRE_TAGS and v > 0), key=lambda kv: -kv[1])
+    if not every:
         return []
-    specific = [(t, v) for t, v in genre if t not in BROAD]
-    pool = specific or genre
-    top = pool[0][1]
+    # How strong the game's main genre is, skipped or not: what takes its place must be pronounced too
+    # (Resident Evil without horror is an action game, not a puzzle one).
+    top = next((v for t, v in every if t not in BROAD), every[0][1])
+    strong = [(t, v) for t, v in every if family(t) not in skip and v >= share * top]
+    pool = [(t, v) for t, v in strong if t not in BROAD] or strong
     out: list[str] = []
-    for t, v in pool:
-        if v >= share * top and family(t) not in out:
+    for t, _ in pool:
+        if family(t) not in out:
             out.append(family(t))
         if len(out) >= n:
             break
@@ -76,6 +79,14 @@ def present(tags: dict | None, share: float = 0.2) -> set[str]:
     tags = tags or {}
     top = max(tags.values(), default=0) or 1
     return {family(t) for t, v in tags.items() if t in GENRE_TAGS and v >= share * top}
+
+
+def excluded(dealbreakers, tags_avoid) -> set[str]:
+    """Genre families the player ruled out: «не хоррор» drops horror from what a reference must share."""
+    out = {family(t) for t in (tags_avoid or []) if t in GENRE_TAGS}
+    if "horror" in (dealbreakers or []):
+        out.add("horror")
+    return out
 
 
 def matches(anchors: list[list[str]], have: set[str]) -> bool:

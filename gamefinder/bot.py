@@ -60,15 +60,15 @@ QUICK_REQ = {k: req for k, _, req in QUICK}
 
 # «Что точно не надо?»: (key, button, what it adds to the request)
 AVOID = [
-    ("horror", ("Horror", "Хоррор"), {"dealbreakers": ["horror"], "tags_avoid": ["Horror"]}),
-    ("shooter", ("Shooters", "Шутеры"), {"tags_avoid": ["FPS", "Shooter"]}),
-    ("text", ("Reading", "Чтение"), {"tags_avoid": ["Visual Novel", "Text-Based"]}),
-    ("hard", ("Hard", "Сложно"), {"axes": {"difficulty": 3}}),
-    ("grind", ("Grind", "Гринд"), {"axes": {"grind": 2}}),
-    ("pvp", ("Online and PvP", "Онлайн и PvP"), {"dealbreakers": ["online_only"], "tags_avoid": ["PvP"]}),
-    ("mtx", ("Microtransactions", "Донат"), {"dealbreakers": ["mtx"]}),
-    ("early", ("Early access", "Ранний доступ"), {"dealbreakers": ["early_access"]}),
-    ("noru", ("No Russian", "Без русского"), {"dealbreakers": ["no_ru"]}),     # shown to Russian players only
+    ("horror", ("No horror", "Без хоррора"), {"dealbreakers": ["horror"], "tags_avoid": ["Horror"]}),
+    ("shooter", ("No shooters", "Без шутеров"), {"tags_avoid": ["FPS", "Shooter"]}),
+    ("text", ("No heavy reading", "Без чтения"), {"tags_avoid": ["Visual Novel", "Text-Based"]}),
+    ("hard", ("Nothing hard", "Без сложности"), {"axes": {"difficulty": 3}}),
+    ("grind", ("No grind", "Без гринда"), {"axes": {"grind": 2}}),
+    ("pvp", ("No online/PvP", "Без онлайна"), {"dealbreakers": ["online_only"], "tags_avoid": ["PvP"]}),
+    ("mtx", ("No microtransactions", "Без доната"), {"dealbreakers": ["mtx"]}),
+    ("early", ("No early access", "Без раннего доступа"), {"dealbreakers": ["early_access"]}),
+    ("noru", ("Russian only", "Только с русским"), {"dealbreakers": ["no_ru"]}),     # shown to Russian players only
 ]
 AVOID_MAP = {k: (label, eff) for k, label, eff in AVOID}
 
@@ -261,7 +261,8 @@ def aspect_kb(opts, picked) -> InlineKeyboardMarkup:
 
 
 def avoid_kb(picked) -> InlineKeyboardMarkup:
-    btn = {k: (("✓ " if k in picked else "") + pick(label), f"av:{k}") for k, label, _ in AVOID}
+    # Each button says what it rules out («Без хоррора»): a bare «Хоррор» was read as «I want horror».
+    btn = {k: (("✅ " if k in picked else "") + pick(label), f"av:{k}") for k, label, _ in AVOID}
     if i18n.is_ru():
         rows = [[btn["horror"], btn["shooter"], btn["hard"]], [btn["grind"], btn["mtx"], btn["text"]],
                 [btn["pvp"], btn["noru"]], [btn["early"]]]
@@ -580,7 +581,7 @@ def build_router(app: App) -> Router:
                       "title again.\n\n",
                       f"Не нашёл «{escape(missing)}» в Steam: подберу по остальному. Опечатка? Напиши название "
                       "ещё раз.\n\n") + note
-        await app.panel(uid, "pick", texts.card(tr("Anything to avoid?", "Что точно не надо?"), lead=wizard_lead(req),
+        await app.panel(uid, "pick", texts.card(tr("Anything to rule out?", "Что исключить?"), lead=wizard_lead(req),
                                                 note=note),
                         avoid_kb(picked), fresh=fresh)
 
@@ -644,7 +645,7 @@ def build_router(app: App) -> Router:
             picked.append(key)
         app.update_session(uid, avoid=picked)
         await app.panel(uid, "pick", texts.card(
-            tr("Anything to avoid?", "Что точно не надо?"), lead=wizard_lead(req),
+            tr("Anything to rule out?", "Что исключить?"), lead=wizard_lead(req),
             note=tr("Tick what to leave out, or write it in your own words.",
                     "Отметь, что исключить, или напиши своими словами.")), avoid_kb(picked))
 

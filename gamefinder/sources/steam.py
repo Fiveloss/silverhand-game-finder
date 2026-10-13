@@ -3,9 +3,13 @@
 All endpoints here are public; only the library import (GetOwnedGames) needs a Web API key.
 """
 
+import asyncio
+import json
 import logging
 import re
 from datetime import datetime, timezone
+
+import aiohttp
 
 from ..http import Http, HttpError
 
@@ -83,6 +87,30 @@ def spy_fields(d: dict) -> dict:
     }
 
 
+# The store page carries the same player tags as SteamSpy, with vote counts, and has them for a new
+# game from day one (SteamSpy lags by months).
+_TAG_MODAL = re.compile(r"InitAppTagModal\(\s*\d+,\s*(\[.*?\])\s*,", re.S)
+_AGE_OK = "birthtime=315532801; lastagecheckage=1-0-1980; mature_content=1; wants_mature_content=1"
+
+
+def parse_store_tags(html: str) -> dict[str, int]:
+    m = _TAG_MODAL.search(html or "")
+    if not m:
+        return {}
+    try:
+        items = json.loads(m.group(1))
+    except ValueError:
+        return {}
+    out = {}
+    for t in items if isinstance(items, list) else []:
+        if isinstance(t, dict) and t.get("name"):
+            try:
+                out[str(t["name"])] = int(t.get("count") or 0)
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
 class Steam:
     def __init__(self, http: Http, cc: str = "kz", api_key: str = ""):
         self.http = http
@@ -110,6 +138,16 @@ class Steam:
 
     async def spy_details(self, appid: int) -> dict:
         return await self.http.get_json(SPY, {"request": "appdetails", "appid": appid}) or {}
+
+    async def store_tags(self, appid: int) -> dict[str, int]:
+        """Player tags with votes from the store page; {} when the page has none or did not load."""
+        try:
+            html = await self.http.get_text(f"{STORE}/app/{appid}/", {"l": "english"},
+                                            headers={"Cookie": _AGE_OK, "User-Agent": "Mozilla/5.0"})
+        except (HttpError, aiohttp.ClientError, asyncio.TimeoutError, OSError, ValueError) as e:
+            log.info("store tags for %s: %s", appid, e)
+            return {}
+        return parse_store_tags(html)
 
     async def store_details(self, appid: int) -> dict | None:
         data = await self.http.get_json(f"{STORE}/api/appdetails",

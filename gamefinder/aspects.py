@@ -427,6 +427,20 @@ def hooks(game: dict, passport: dict | None, n: int = 4) -> list[Aspect]:
     return [a for a in options(game, passport, limit=8) if a.group and a.group not in NOT_A_HOOK][:n]
 
 
+def fits_request(a: Aspect, req) -> bool:
+    """False when the request goes against this aspect: «не хоррор» against fear and tension,
+    «проще» against challenge (an axis the request sets on the other side)."""
+    if "horror" in (getattr(req, "dealbreakers", None) or []) and a.group == "tension":
+        return False
+    if set(a.tags) & set(getattr(req, "tags_avoid", None) or []):
+        return False
+    for k, v in a.axes.items():
+        want = (getattr(req, "axes", None) or {}).get(k)
+        if want is not None and (v - 5) * (want - 5) < 0:
+            return False
+    return True
+
+
 def strengths(game: dict, passport: dict | None) -> dict[str, float]:
     """group -> 0..1, how surely this game is strong at it: praised in its reviews (most sure), a strong
     feel axis in its passport, or only its player tags (least sure)."""

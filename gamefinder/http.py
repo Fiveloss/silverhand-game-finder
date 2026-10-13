@@ -84,6 +84,17 @@ class Http:
                 log.debug("retrying %s after %s", url, e)
             await asyncio.sleep(delay)
 
+    async def get_text(self, url: str, params: dict | None = None, *, headers: dict | None = None,
+                       timeout: float = 30) -> str:
+        """A page as text (one try: callers treat a failure as "nothing known")."""
+        host = urlsplit(url).hostname or ""
+        await self._wait_turn(host, None)
+        s = await self.session()
+        async with s.get(url, params=params, headers=headers, timeout=aiohttp.ClientTimeout(total=timeout)) as r:
+            if r.status != 200:
+                raise HttpError(r.status, url)
+            return await r.text()
+
     async def post_json(self, url: str, payload: dict, *, headers: dict | None = None,
                         timeout: float = 180) -> tuple[int, dict | None]:
         """(status, body) without raising on HTTP errors: LLM APIs report limits in the body."""

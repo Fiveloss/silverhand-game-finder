@@ -123,9 +123,9 @@ def test_provider_routing_and_daily_limits():
     a = Analyst.from_config(None, cfg)
     kinds = lambda task: [p.kind for p in providers_for(a, task)]  # noqa: E731
     assert kinds("passport") == ["lite"]
-    assert kinds("judge") == ["flash", "groq", "groq2", "lite"]
+    assert kinds("judge") == ["groq", "groq2", "flash", "lite"]
     assert kinds("intent") == ["groq", "groq2", "lite", "flash"]
-    flash = a.order("judge")[0]
+    flash = next(p for p in a.order("judge") if p.kind == "flash")
     daily = [{"error": {"code": 429, "details": [
         {"@type": "type.googleapis.com/google.rpc.QuotaFailure",
          "violations": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier", "quotaValue": "20"}]},
@@ -133,9 +133,9 @@ def test_provider_routing_and_daily_limits():
     assert limit_rest(flash, daily) == 58009
     assert limit_rest(flash, {"error": {"code": 429}}) == 90
     flash.resting_until = time.time() + limit_rest(flash, daily)
-    assert kinds("judge") == ["groq", "groq2", "lite"]
+    assert kinds("judge") == ["groq", "groq2", "lite"]  # flash resting till the reset
     assert payload_extra(flash, "judge") == {"reasoning_effort": "low"}
-    assert payload_extra(flash, "passport") == {} and payload_extra(a.order("judge")[1], "judge") == {}
+    assert payload_extra(flash, "passport") == {} and payload_extra(a.order("judge")[0], "judge") == {}
     no_groq = Analyst.from_config(None, SimpleNamespace(**{**vars(cfg), "groq_api_key": ""}))
     assert [p.kind for p in no_groq.order("intent")] == ["lite", "flash"]
 
@@ -173,6 +173,72 @@ def test_format_rules():
     assert genres.format_clash(elden, hk)[0] and genres.format_clash(elden, clair)[0]
     assert genres.format_clash(elden, fps) == (False, True)
     assert genres.format_ru(elden) == "3D, от третьего лица, бои в реальном времени"
+
+
+def test_excluding_the_references_genre_keeps_the_rest():
+    """«как Resident Evil, но не хоррор»: horror stops being required, the rest (shooter) stays;
+    with nothing excluded a horror game is required as before."""
+    games = [
+        game(1, "Resident Evil Requiem", {"Survival Horror": 1000, "Horror": 900, "Third-Person Shooter": 800,
+                                         "Action": 700, "Story Rich": 500}),
+        game(2, "Dead Space", {"Survival Horror": 1000, "Horror": 900, "Third-Person Shooter": 800, "Sci-fi": 600}),
+        game(3, "Gears Shooter", {"Third-Person Shooter": 1000, "Action": 900, "Story Rich": 600, "Sci-fi": 500}),
+        game(4, "Farm Life", {"Farming Sim": 1000, "Relaxing": 900, "Cute": 500}),
+    ]
+    cat = Catalog()
+    cat.build(games)
+    by_id = {g["appid"]: g for g in games}
+    plain = for_request(Request(seeds=["Resident Evil Requiem"]), [by_id[1]], [], {}, cat.idf, set())
+    assert plain.anchors and plain.anchors[0][0] == "horror"
+    assert [p.appid for p in recommend(cat, plain, {}, {}, limit=3)] == [2]
+    no_horror = Request(seeds=["Resident Evil Requiem"], dealbreakers=["horror"])
+    taste = for_request(no_horror, [by_id[1]], [], {}, cat.idf, set())
+    assert all("horror" not in a for a in taste.anchors), taste.anchors
+    assert [p.appid for p in recommend(cat, taste, {}, {}, limit=3)] == [3]
+
+
+def test_typed_title_with_a_typo_finds_the_game():
+    """«resident evil requeim»: Steam's search forgives no typo, so the bot searches the start of the title
+    and keeps the close match; a model that shortened the title to «Resident Evil» does not win."""
+    import asyncio
+    from gamefinder.config import Config
+    from gamefinder.http import Http
+    from gamefinder.intent import _longer_typed
+    from gamefinder.service import Service
+    assert _longer_typed("Resident Evil", ["resident evil requeim"]) == "resident evil requeim"
+    assert _longer_typed("Hollow Knight", ["hollow knight"]) == "Hollow Knight"
+
+    class FakeSteam:
+        searched = []
+
+        async def search(self, term, limit=5):
+            FakeSteam.searched.append(term)
+            if term == "resident evil":
+                return [{"appid": 2, "name": "Resident Evil 4"}, {"appid": 9, "name": "Resident Evil Requiem"},
+                        {"appid": 10, "name": "Resident Evil Requiem Original Soundtrack"}]
+            return []
+
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Db(os.path.join(tmp, "t.db"))
+        for appid, name in ((2, "Resident Evil 4"), (9, "Resident Evil Requiem")):
+            db.upsert_game(appid, name=name, tags={"Survival Horror": 100}, store_ok=1, spy_ok=1)
+        try:
+            s = Service(Config(bot_token="42:TEST", owner_ids=frozenset(), db_path=os.path.join(tmp, "t.db")),
+                        db, Http())
+            s.steam = FakeSteam()
+            found = asyncio.run(s.resolve("resident evil requeim", strict=True))
+            assert [g["name"] for g in found] == ["Resident Evil Requiem"], found
+            assert FakeSteam.searched == ["resident evil requeim", "resident evil"]
+        finally:
+            db.close()
+
+
+def test_store_page_tags():
+    from gamefinder.sources.steam import parse_store_tags
+    html = ('<script>InitAppTagModal( 3764200, [{"tagid":1662,"name":"Survival Horror","count":751},'
+            '{"tagid":1659,"name":"Zombies","count":646},{"name":"","count":3}], [], "x" );</script>')
+    assert parse_store_tags(html) == {"Survival Horror": 751, "Zombies": 646}
+    assert parse_store_tags("<html>Site Error</html>") == {} and parse_store_tags("InitAppTagModal( 1, [oops], ") == {}
 
 
 def test_complaint_reads_against_taste():

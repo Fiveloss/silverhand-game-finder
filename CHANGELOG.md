@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.2 — 2026-10-13
+
+From «как resident evil requeim · проще · не хоррор», which found nothing.
+
+- The exclusion buttons say what they rule out («Без хоррора», ticked «✅ Без хоррора»), under
+  «Что исключить?»: a bare «Хоррор» was read as «I want horror».
+- A genre the player rules out is no longer required from the reference: «как Resident Evil, но не
+  хоррор» keeps the rest of what defines it (action) instead of finding nothing. A guessed «what it
+  is loved for» that the request goes against (fear with «не хоррор», challenge with «проще») is
+  dropped.
+- A typo the store search does not forgive: the bot searches the start of the title and keeps the
+  close match; a model that shortened a new title to an older game («Resident Evil») no longer wins.
+- Tags of a new release: SteamSpy lags by months, so the store page's player tags fill in.
+- The judge runs on Groq first (Gemini Flash hung for 25-50 s), one try per provider.
+
 ## 0.5.1 — 2026-10-13
 
 The bot went silent for hours on 12.10: with the bigger catalog it grew past `MemoryHigh=250M`,

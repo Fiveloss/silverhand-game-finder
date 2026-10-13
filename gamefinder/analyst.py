@@ -233,7 +233,7 @@ class Provider:
 
 
 # Which provider does which job. The free Gemini Flash quota is tiny (about 20 calls a day per
-# model), so it is kept for the judge, where its quality shows most. Reviews are read by Flash Lite
+# model) and it often hangs, so it only stands in for Groq, which judges well in a second or two. Reviews are read by Flash Lite
 # only: a passport costs 10-15k tokens, and Groq's small daily token quota is kept for the quick
 # calls a player waits for, which go to the fastest providers first.
 TASK_ORDER = {
@@ -241,12 +241,12 @@ TASK_ORDER = {
     "intent": ("groq", "groq2", "lite", "flash"),
     "scout": ("groq", "groq2", "lite", "flash"),
     "card": ("groq", "groq2", "lite", "flash"),
-    "judge": ("flash", "groq", "groq2", "lite"),
+    "judge": ("groq", "groq2", "flash", "lite"),
 }
 # Seconds one attempt may take. A free tier sometimes hangs on a call it would answer at once
 # when asked again, so a player-facing call that hangs is tried once more, then the next provider.
 TASK_TIMEOUT = {"intent": 15, "scout": 20, "card": 20, "judge": 25, "passport": 180}
-TASK_ATTEMPTS = {"passport": 1}
+TASK_ATTEMPTS = {"passport": 1, "judge": 1}     # a hung judge: straight to the next provider
 # A thinking model answers a short structured question about twice as fast with little thinking.
 QUICK_EXTRA = {"flash": {"reasoning_effort": "low"}, "lite": {"reasoning_effort": "low"}}
 

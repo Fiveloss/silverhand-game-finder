@@ -9,7 +9,7 @@ import math
 from dataclasses import dataclass, field
 
 from .analyst import AXES
-from .genres import defining as defining_genres, format_of
+from .genres import defining as defining_genres, excluded as excluded_genres, format_of
 from .titles import series_key
 
 # Tags that say almost nothing about taste.
@@ -76,6 +76,7 @@ def for_request(req, seeds: list[dict], avoid: list[dict], passports: dict[int, 
     t = Taste(dealbreakers=list(req.dealbreakers), played=set(played))
     diversify = getattr(req, "diversify", False)     # "something else entirely": keep only asked-for tags
     muted = set(getattr(req, "mute_tags", None) or [])  # parts of the seed they did not care about
+    ruled_out = excluded_genres(req.dealbreakers, req.tags_avoid)
     for g in seeds:
         if not diversify:
             top = [x for x, _ in sorted((g.get("tags") or {}).items(), key=lambda kv: -kv[1])
@@ -84,7 +85,8 @@ def for_request(req, seeds: list[dict], avoid: list[dict], passports: dict[int, 
             fmt = format_of(g.get("tags"))
             if fmt:
                 t.formats.append(fmt)
-            anchor = defining_genres(g.get("tags"))
+            # «Как Resident Evil, но не хоррор»: the rest of what defines it (shooter, survival) stays.
+            anchor = defining_genres(g.get("tags"), skip=ruled_out)
             if anchor:
                 t.anchors.append(anchor)
                 t.genres.update(anchor)

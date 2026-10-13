@@ -75,9 +75,9 @@ class Service:
         """The game's row, fetching tags and store facts first if they are missing.
         light: player tags only (what scoring needs); the slower store page is left to the worker."""
         g = self.db.game(appid)
-        if g and g["spy_ok"] and (light or g["store_ok"]):
+        if g and g["spy_ok"] and g["tags"] and (light or g["store_ok"]):
             return g
-        need_spy = not g or not g["spy_ok"]
+        need_spy = not g or not g["spy_ok"] or not g["tags"]     # no tags yet: SteamSpy or the store page now
         need_store = (not g or not g["store_ok"]) and not light
 
         async def nothing():
@@ -99,6 +99,11 @@ class Service:
                 fields.update(spy_fields(spy))
                 if self.db.game(appid):
                     fields.pop("name", None)    # the store's name is the canonical one
+            if not fields.get("tags") and (self.db.game(appid) or fields.get("name")):
+                # SteamSpy has not tagged it yet (a new release): the store page has the tags.
+                tags = await self.steam.store_tags(appid)
+                if tags:
+                    fields["tags"] = tags
             if self.db.game(appid) or fields.get("name"):
                 self.db.upsert_game(appid, **fields, spy_ok=1)
         if need_store and d is None and self.db.game(appid):
@@ -118,6 +123,13 @@ class Service:
             if strict:
                 found = sorted((i for i in found if titles.confident(text, i["name"])),
                                key=lambda i: -titles.score(text, i["name"]))
+                words = titles.expand(text).split()
+                if not found and len(words) >= 3:
+                    # Steam's search forgives no typo («resident evil requeim»): search the start of the
+                    # title and keep what is close enough to the whole of it.
+                    wider = await self.steam.search(" ".join(words[:-1]), 25)
+                    found = sorted((i for i in wider if titles.confident(text, i["name"])),
+                                   key=lambda i: -titles.score(text, i["name"]))
             out = []
             for item in found:
                 g = self.db.game(item["appid"]) or await self.ensure_game(item["appid"], item["name"], light=light)
@@ -287,8 +299,8 @@ class Service:
             # What hooked them: their own answer, or else what the reference's reviews praise most.
             if seeds and not req.focus_labels and not req.whole and not req.diversify:
                 g0 = seeds[0]
-                p0 = self.db.passport(g0["appid"]) if g0["appid"] > 0 else ext_passports.get(g0["appid"])
-                guessed = aspects.hooks(g0, p0)
+                p0 = (self.db.passport(g0["appid"]) if g0["appid"] > 0 else None) or ext_passports.get(g0["appid"])
+                guessed = [a for a in aspects.hooks(g0, p0, n=6) if aspects.fits_request(a, req)][:4]
                 if guessed:
                     req = aspects.apply(req, g0, (p0 or {}).get("feel"), guessed)
             await say(i18n.tr("Picking candidates", "Подбираю кандидатов"))
@@ -383,7 +395,16 @@ class Service:
         exclusive, an old game) a card from the free LLM describing it. Cards get negative appids."""
         found = await self.resolve(title, limit=5, strict=True)
         if found:
-            return found[0]
+            g = found[0]
+            if not g.get("tags") and self.analyst.enabled:
+                # A brand-new game SteamSpy has not tagged yet (Resident Evil Requiem in its first
+                # months): the model's card gives its genres, feel and what it is loved for.
+                card = await external.describe(self.analyst, self.db, g["name"])
+                if card and card.get("tags"):
+                    g = {**g, "tags": dict(card["tags"])}
+                    if not self.db.passport(g["appid"]):
+                        ext_passports[g["appid"]] = external.card_passport(card)
+            return g
         # IGDB knows every platform: the game may be on Steam under another name, or elsewhere only.
         info = await self.igdb.find(title) if self.igdb.enabled else None
         if info and (info.get("stores") or {}).get("steam"):

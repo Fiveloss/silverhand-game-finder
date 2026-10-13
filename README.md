@@ -215,8 +215,9 @@ flowchart LR
   share passed separately. Each complaint is either about quality (bugs, performance,
   monetization, abandoned development, servers) or about taste, with an axis and a
   direction: "too slow" is pace, low. Each job has its own order of providers: the free
-  Gemini Flash quota is tiny (about 20 calls a day), so it is kept for the judge; reviews
-  are read by Gemini Flash Lite (same key, a much bigger quota), then Groq; quick calls a
+  Gemini Flash quota is tiny (about 20 calls a day) and it often hangs, so it only stands
+  in; the judge runs on Groq (a second or two); reviews are read by Gemini Flash Lite
+  (same key, a much bigger quota); quick calls a
   player waits for (understanding the request, the scout, cards of non-Steam games) go to
   Groq, then Flash Lite with little "thinking", and have short timeouts. A provider that
   hits a per-minute limit (HTTP 429) rests for 90 seconds, 10 minutes if it happens again;

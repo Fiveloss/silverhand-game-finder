@@ -902,6 +902,16 @@ async def parse(analyst, text: str, *, usage: dict | None = None) -> Request:
     return h
 
 
+def _longer_typed(title: str, typed: list[str]) -> str:
+    from .titles import normalize
+    t = normalize(title)
+    for raw in typed:
+        r = normalize(raw)
+        if t and r.startswith(t + " ") and len(r.split()) > len(t.split()):
+            return raw
+    return title
+
+
 def _merge(llm: Request, h: Request) -> Request:
     llm.source = "llm"
     llm.dealbreakers = [k for k in DEALBREAKERS if k in set(llm.dealbreakers) | set(h.dealbreakers)]
@@ -910,6 +920,10 @@ def _merge(llm: Request, h: Request) -> Request:
         llm.mood = "coop"
     if not llm.seeds and not llm.avoid:
         llm.seeds, llm.avoid = list(h.seeds), list(h.avoid)
+    # A model that does not know a new game shortens it to one it knows («resident evil requeim» ->
+    # «Resident Evil», the 2002 one): the player's longer title wins, typo and all (resolve copes).
+    llm.seeds = [_longer_typed(s, h.seeds) for s in llm.seeds]
+    llm.avoid = [_longer_typed(s, h.avoid) for s in llm.avoid]
     if llm.max_hours is None and llm.min_hours is None:
         llm.max_hours, llm.min_hours = h.max_hours, h.min_hours
     return llm

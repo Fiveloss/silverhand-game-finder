@@ -732,9 +732,9 @@ def test_keyboards_fit_telegram():
     assert rows == [["av:horror", "av:shooter", "av:hard"], ["av:grind", "av:mtx", "av:text"],
                     ["av:pvp", "av:noru"], ["av:early"], ["av:done"], ["go", "home"]], rows
     names = dict(zip(datas_of(botmod.avoid_kb([])), labels_of(botmod.avoid_kb([]))))
-    assert names["av:text"] == "Чтение" and names["av:pvp"] == "Онлайн и PvP"
+    assert names["av:text"] == "Без чтения" and names["av:pvp"] == "Без онлайна"
     assert labels_of(botmod.avoid_kb([]))[-3] == "Ничего, дальше ▸"
-    assert labels_of(botmod.avoid_kb(["horror"]))[0] == "✓ Хоррор"
+    assert labels_of(botmod.avoid_kb(["horror"]))[0] == "✅ Без хоррора"
     assert labels_of(botmod.avoid_kb(["horror"]))[-3] == "Дальше ▸"
     assert datas_of(botmod.aspect_kb(opts, [])) == ["asp:explore", "asp:atmos", f"asp:{'x' * 12}", "asp:all",
                                                     "wrong", "go", "home"]
@@ -928,8 +928,8 @@ async def test_typed_message_is_deleted_and_the_panel_reposted(h):
     texts = h.screens(FRIEND)
     understood = [t for t in texts if "Понимаю запрос" in t]
     assert len(understood) == 1 and "кооп с другом, не шутер" in understood[0]
-    assert "Что точно не надо?" in p.caption and "Запрос: с друзьями · не шутер" in p.caption
-    assert h.plabel(FRIEND, "av:shooter") == "✓ Шутеры"                # understood from the text: ticked
+    assert "Что исключить?" in p.caption and "Запрос: с друзьями · не шутер" in p.caption
+    assert h.plabel(FRIEND, "av:shooter") == "✅ Без шутеров"                # understood from the text: ticked
     assert h.session(FRIEND)["avoid"] == ["shooter"] and h.state(FRIEND) == "wizard"
     assert h.s.asked == [] and h.s.requests == []                      # no game named: no «Чем зацепила?»
     # the player's typing keeps nothing but the panel in the chat
@@ -941,7 +941,7 @@ async def test_typed_message_is_deleted_and_the_panel_reposted(h):
     mid = await h.send(FRIEND, "хочу <b>что-то</b> & без доната")
     assert h.saw(FRIEND, "хочу &lt;b&gt;что-то&lt;/b&gt; &amp; без доната")
     assert h.is_deleted(FRIEND, mid) and h.check_panel(FRIEND).message_id > mid
-    assert h.plabel(FRIEND, "av:mtx") == "✓ Донат"
+    assert h.plabel(FRIEND, "av:mtx") == "✅ Без доната"
 
 
 # --- the wizard
@@ -978,7 +978,7 @@ async def test_wizard_with_buttons(h):
     assert h.session(FRIEND)["ask"]["picked"] == ["explore", "atmos"] and h.s.requests == []
 
     await h.press(FRIEND, "asp:done")
-    assert "Что точно не надо?" in h.caption(FRIEND)
+    assert "Что исключить?" in h.caption(FRIEND)
     assert "исследование мира, атмосфера" in h.caption(FRIEND)          # the lead shows what was picked
     assert h.pbuttons(FRIEND) == AVOID_KEYS + ["av:done", "go", "home"] and h.session(FRIEND)["avoid"] == []
     assert h.pbuttons(FRIEND, labels=True)[-3] == "Ничего, дальше ▸"
@@ -989,7 +989,7 @@ async def test_wizard_with_buttons(h):
     await h.press(FRIEND, "av:grind")
     await h.press(FRIEND, "av:grind")
     await h.press(FRIEND, "av:nosuchkey", message=h.panel(FRIEND))                      # ignored
-    assert h.plabel(FRIEND, "av:shooter") == "✓ Шутеры" and h.plabel(FRIEND, "av:grind") == "Гринд"
+    assert h.plabel(FRIEND, "av:shooter") == "✅ Без шутеров" and h.plabel(FRIEND, "av:grind") == "Без гринда"
     assert h.plabel(FRIEND, "av:done") == "Дальше ▸"
     assert h.session(FRIEND)["avoid"] == ["shooter"]
 
@@ -1036,7 +1036,7 @@ async def test_wizard_answered_in_words(h):
     mid = await h.send(FRIEND, "атмосфера и исследование, а сложность бесила")
     assert h.parsed == ["как Hollow Knight, но проще"]          # the answer is not a new request
     assert h.is_deleted(FRIEND, mid) and h.check_panel(FRIEND).message_id > mid
-    assert "Что точно не надо?" in h.caption(FRIEND) and h.s.requests == []
+    assert "Что исключить?" in h.caption(FRIEND) and h.s.requests == []
     req = h.req(FRIEND)
     assert req.asked and req.focus_axes == ["exploration"]
     assert "Difficult" in req.tags_avoid and req.axes["difficulty"] <= 3
@@ -1056,7 +1056,7 @@ async def test_wizard_answered_in_words(h):
     await h.send(FRIEND, "что-нибудь как Hollow Knight")
     await h.send(FRIEND, "всё")
     req = h.req(FRIEND)
-    assert req.asked and req.focus_axes is None and "Что точно не надо?" in h.caption(FRIEND)
+    assert req.asked and req.focus_axes is None and "Что исключить?" in h.caption(FRIEND)
     # a correction typed at «Сколько есть времени?» starts the search with it
     await h.press(FRIEND, "av:done")
     assert "Сколько есть времени?" in h.caption(FRIEND)
@@ -1073,8 +1073,8 @@ async def test_wizard_ticks_exclusions_and_skips_known_time(h):
     m = h.mark()
     await h.send(FRIEND, "что-нибудь как Hollow Knight на вечер без хоррора")
     await h.press(FRIEND, "asp:all")
-    assert "Что точно не надо?" in h.caption(FRIEND)
-    assert h.pbuttons(FRIEND, labels=True)[0] == "✓ Хоррор" and h.session(FRIEND)["avoid"] == ["horror"]
+    assert "Что исключить?" in h.caption(FRIEND)
+    assert h.pbuttons(FRIEND, labels=True)[0] == "✅ Без хоррора" and h.session(FRIEND)["avoid"] == ["horror"]
     assert h.pbuttons(FRIEND, labels=True)[-3] == "Дальше ▸"
     await h.press(FRIEND, "av:noru")
     await h.press(FRIEND, "av:done")                          # hours are known: no time question
@@ -1109,7 +1109,7 @@ async def test_go_skips_the_remaining_questions(h):
     await h.press(FRIEND, "go")
     _, req, seen = h.last_request()
     assert req.focus_axes == ["exploration"] and req.focus_labels == ["Исследование мира"] and req.asked
-    assert not h.saw(FRIEND, "Что точно не надо?", m) and not h.saw(FRIEND, "Сколько есть времени?", m)
+    assert not h.saw(FRIEND, "Что исключить?", m) and not h.saw(FRIEND, "Сколько есть времени?", m)
     assert "Подкрутить?" in h.check_panel(FRIEND).caption and seen == set()
 
     # at «Что точно не надо?»: the ticks count, the time question is skipped
@@ -1159,7 +1159,7 @@ async def test_like_button_unknown_reference_and_failed_question(h):
     # a reference that is not on Steam: nothing to ask about it, straight to the exclusions
     await h.send(FRIEND, "/find")
     await h.send(FRIEND, "что-то как Zelda и Hades")
-    assert h.s.asked[-1] == "Zelda" and "Что точно не надо?" in h.caption(FRIEND)
+    assert h.s.asked[-1] == "Zelda" and "Что исключить?" in h.caption(FRIEND)
     note = h.caption(FRIEND).split("\n\n", 1)[1]
     assert note.startswith("Не нашёл «Zelda» в Steam"), note
     assert "Отметь, что исключить" in note
@@ -1178,7 +1178,7 @@ async def test_like_button_unknown_reference_and_failed_question(h):
     h.s.fail = {"aspects"}
     await h.send(FRIEND, "/find")
     await h.send(FRIEND, "как Hollow Knight, но короче")
-    assert "Что точно не надо?" in h.caption(FRIEND) and h.req(FRIEND).asked
+    assert "Что исключить?" in h.caption(FRIEND) and h.req(FRIEND).asked
     assert h.errors == ["aspect options failed"]
     h.errors.clear()
     await h.press(FRIEND, "av:done")                          # «короче» gave the hours: no time question
@@ -1254,7 +1254,7 @@ async def test_written_correction_after_results(h):
     assert h.session(FRIEND)["seen"] == [5, 4, 7, 2, 8, 9] and h.state(FRIEND) == "fix"
     p = h.check_panel(FRIEND)
     assert "Подкрутить?" in p.caption and "не хоррор" in p.caption and not h.s.asked
-    assert not h.saw(FRIEND, "Что точно не надо?", m)          # a correction of results asks nothing
+    assert not h.saw(FRIEND, "Что исключить?", m)          # a correction of results asks nothing
 
     await h.send(FRIEND, "а если с кооперативом?")
     _, req, seen = h.last_request()
@@ -1593,7 +1593,7 @@ async def test_loosen_buttons_after_nothing_found(h):
     the rest of the request and what was seen."""
     h.s.fail = {"empty"}
     await h.send(FRIEND, "что-нибудь без хоррора и без доната на вечер")
-    assert h.plabel(FRIEND, "av:horror") == "✓ Хоррор" and h.plabel(FRIEND, "av:mtx") == "✓ Донат"
+    assert h.plabel(FRIEND, "av:horror") == "✅ Без хоррора" and h.plabel(FRIEND, "av:mtx") == "✅ Без доната"
     await h.press(FRIEND, "av:shooter")
     await h.press(FRIEND, "av:noru")
     await h.press(FRIEND, "av:done")                           # the hours are known: the search starts
@@ -1749,7 +1749,7 @@ async def test_leaving_a_question_through_a_button_resets_the_state(h):
     assert h.state(FRIEND) == "" and "Во что поиграть сейчас?" in h.caption(FRIEND)
     await h.send(FRIEND, "кооп с другом, не шутер")
     assert h.parsed[-1] == "кооп с другом, не шутер" and not h.req(FRIEND).seeds
-    assert "Что точно не надо?" in h.caption(FRIEND)
+    assert "Что исключить?" in h.caption(FRIEND)
 
     await h.press(FRIEND, "home")
     await h.press(FRIEND, "q:evening")                         # a quick request from the wizard's home
@@ -1780,9 +1780,9 @@ async def test_typed_correction_keeps_ticked_exclusions(h):
 async def test_unticking_an_exclusion_from_the_text(h):
     """«Хоррор» is ticked because the text said «без хоррора»; unticking it must let horror back in."""
     await h.send(FRIEND, "что-нибудь без хоррора")
-    assert h.pbuttons(FRIEND, labels=True)[0] == "✓ Хоррор"
+    assert h.pbuttons(FRIEND, labels=True)[0] == "✅ Без хоррора"
     await h.press(FRIEND, "av:horror")
-    assert h.pbuttons(FRIEND, labels=True)[0] == "Хоррор"
+    assert h.pbuttons(FRIEND, labels=True)[0] == "Без хоррора"
     await h.press(FRIEND, "go")
     _, req, _ = h.last_request()
     assert "horror" not in req.dealbreakers and "Horror" not in req.tags_avoid, (req.dealbreakers, req.tags_avoid)
